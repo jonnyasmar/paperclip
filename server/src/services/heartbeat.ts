@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { and, asc, desc, eq, gt, gte, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import type { BillingType } from "@paperclipai/shared";
 import {
@@ -2678,49 +2678,6 @@ export function heartbeatService(db: Db) {
       .from(heartbeatRuns)
       .where(and(eq(heartbeatRuns.agentId, agentId), inArray(heartbeatRuns.status, ["queued", "running"])))
       .orderBy(desc(heartbeatRuns.createdAt));
-
-    // Cooldown dedup: skip if a run for the same issue completed recently
-    const cooldownSec = normalizeMaxConcurrentRuns(policy.maxConcurrentRuns) > 0
-      ? (agent.runtimeConfig as Record<string, unknown> | null)?.heartbeat
-        ? ((agent.runtimeConfig as Record<string, unknown>).heartbeat as Record<string, unknown>)?.cooldownSec as number ?? 10
-        : 10
-      : 10;
-    if (taskKey && cooldownSec > 0) {
-      const cooldownCutoff = new Date(Date.now() - cooldownSec * 1000);
-      const recentlyCompletedSameScope = await db
-        .select()
-        .from(heartbeatRuns)
-        .where(
-          and(
-            eq(heartbeatRuns.agentId, agentId),
-            inArray(heartbeatRuns.status, ["succeeded", "failed"]),
-            gte(heartbeatRuns.finishedAt, cooldownCutoff),
-          ),
-        )
-        .orderBy(desc(heartbeatRuns.finishedAt))
-        .limit(5);
-      const recentSameScopeRun = recentlyCompletedSameScope.find(
-        (candidate) => isSameTaskScope(runTaskKey(candidate), taskKey),
-      );
-      if (recentSameScopeRun) {
-        await db.insert(agentWakeupRequests).values({
-          companyId: agent.companyId,
-          agentId,
-          source,
-          triggerDetail,
-          reason: "cooldown_dedup_recently_completed",
-          payload,
-          status: "coalesced",
-          coalescedCount: 1,
-          requestedByActorType: opts.requestedByActorType ?? null,
-          requestedByActorId: opts.requestedByActorId ?? null,
-          idempotencyKey: opts.idempotencyKey ?? null,
-          runId: recentSameScopeRun.id,
-          finishedAt: new Date(),
-        });
-        return recentSameScopeRun;
-      }
-    }
 
     const sameScopeQueuedRun = activeRuns.find(
       (candidate) => candidate.status === "queued" && isSameTaskScope(runTaskKey(candidate), taskKey),
