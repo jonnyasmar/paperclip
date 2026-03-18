@@ -14,6 +14,7 @@ import { DialogProvider } from "./context/DialogContext";
 import { ToastProvider } from "./context/ToastContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ScrollToTop } from "./components/ScrollToTop";
 import { initPluginBridge } from "./plugins/bridge-init";
 import { PluginLauncherProvider } from "./plugins/launchers";
 import "@mdxeditor/editor/style.css";
@@ -44,6 +45,7 @@ createRoot(document.getElementById("root")!).render(
           <ToastProvider>
             <LiveUpdatesProvider>
               <BrowserRouter>
+                <ScrollToTop />
                 <TooltipProvider>
                   <BreadcrumbProvider>
                     <SidebarProvider>
