@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prod": "pnpm build && concurrently --names server,locks,ci --prefix-colors blue,yellow,magenta --prefix '[{name}]' 'pnpm prod:server' 'pnpm prod:locks' 'pnpm prod:ci'",
+    "prod:server": "node --import ./server/node_modules/tsx/dist/loader.mjs server/dist/index.js",
+    "prod:locks": "bash ~/asmar-inc/scripts/loop-locks.sh",
+    "prod:ci": "bash ~/asmar-inc/scripts/loop-ci.sh",
     "dev": "node scripts/dev-runner.mjs watch",
     "dev:watch": "node scripts/dev-runner.mjs watch",
     "dev:once": "node scripts/dev-runner.mjs dev",
@@ -35,8 +39,8 @@
   },
   "devDependencies": {
     "@changesets/cli": "^2.30.0",
-    "cross-env": "^10.1.0",
     "@playwright/test": "^1.58.2",
+    "cross-env": "^10.1.0",
     "esbuild": "^0.27.3",
     "typescript": "^5.7.3",
     "vitest": "^3.0.5"
@@ -44,5 +48,8 @@
   "engines": {
     "node": ">=20"
   },
-  "packageManager": "pnpm@9.15.4"
+  "packageManager": "pnpm@9.15.4",
+  "dependencies": {
+    "concurrently": "^9.2.1"
+  }
 }
