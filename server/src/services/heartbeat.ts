@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import type { BillingType } from "@paperclipai/shared";
 import {
@@ -1355,6 +1355,78 @@ export function heartbeatService(db: Db) {
       logger.warn({ reapedCount: reaped.length, runIds: reaped }, "reaped orphaned heartbeat runs");
     }
     return { reaped: reaped.length, runIds: reaped };
+  }
+
+  /**
+   * Expire stale execution locks on issues.
+   *
+   * Finds issues where `executionLockedAt` is older than `staleThresholdMs` and
+   * the referenced run is no longer active (queued/running) or doesn't exist.
+   * Clears `executionRunId`, `executionAgentNameKey`, and `executionLockedAt`.
+   *
+   * This is a safety net for cases where run completion doesn't properly call
+   * `releaseIssueExecutionAndPromote()` (e.g., process crash between run
+   * completion and cleanup).
+   */
+  async function expireStaleExecutionLocks(opts?: { staleThresholdMs?: number }) {
+    const thresholdMs = opts?.staleThresholdMs ?? 60 * 60 * 1000; // default 60 minutes
+    const cutoff = new Date(Date.now() - thresholdMs);
+
+    // Find issues with stale execution locks
+    const staleIssues = await db
+      .select({
+        id: issues.id,
+        executionRunId: issues.executionRunId,
+        executionLockedAt: issues.executionLockedAt,
+        identifier: issues.identifier,
+      })
+      .from(issues)
+      .where(
+        and(
+          isNotNull(issues.executionRunId),
+          isNotNull(issues.executionLockedAt),
+          lt(issues.executionLockedAt, cutoff),
+        ),
+      );
+
+    const expired: string[] = [];
+
+    for (const issue of staleIssues) {
+      // Check if the referenced run is still active
+      const run = issue.executionRunId
+        ? await db
+          .select({ id: heartbeatRuns.id, status: heartbeatRuns.status })
+          .from(heartbeatRuns)
+          .where(eq(heartbeatRuns.id, issue.executionRunId))
+          .then((rows) => rows[0] ?? null)
+        : null;
+
+      // Skip if run is still legitimately active
+      if (run && (run.status === "queued" || run.status === "running")) {
+        continue;
+      }
+
+      // Clear the stale lock
+      await db
+        .update(issues)
+        .set({
+          executionRunId: null,
+          executionAgentNameKey: null,
+          executionLockedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(issues.id, issue.id));
+
+      expired.push(issue.identifier ?? issue.id);
+    }
+
+    if (expired.length > 0) {
+      logger.warn(
+        { expiredCount: expired.length, issues: expired },
+        "expired stale execution locks on issues",
+      );
+    }
+    return { expired: expired.length, issues: expired };
   }
 
   async function resumeQueuedRuns() {
@@ -3117,6 +3189,8 @@ export function heartbeatService(db: Db) {
     wakeup: enqueueWakeup,
 
     reapOrphanedRuns,
+
+    expireStaleExecutionLocks,
 
     resumeQueuedRuns,
 

@@ -539,6 +539,15 @@ export async function startServer(): Promise<StartedServer> {
         .catch((err) => {
           logger.error({ err }, "periodic heartbeat recovery failed");
         });
+
+      // Expire stale execution locks on issues where the lock is older than 60 minutes
+      // and the referenced run is no longer active. This prevents issues from being
+      // permanently blocked by completed/failed runs that didn't clean up properly.
+      void heartbeat
+        .expireStaleExecutionLocks({ staleThresholdMs: 60 * 60 * 1000 })
+        .catch((err) => {
+          logger.error({ err }, "stale execution lock expiry failed");
+        });
     }, config.heartbeatSchedulerIntervalMs);
   }
   
