@@ -140,4 +140,32 @@ describe("execution workspace policy helpers", () => {
       mode: "project_primary",
     });
   });
+
+  it("parses workspaceId from issue execution workspace settings", () => {
+    expect(
+      parseIssueExecutionWorkspaceSettings({
+        mode: "isolated",
+        workspaceId: "ws-123-abc",
+      }),
+    ).toEqual({
+      mode: "isolated",
+      workspaceId: "ws-123-abc",
+    });
+    // Empty/missing workspaceId should be omitted
+    expect(
+      parseIssueExecutionWorkspaceSettings({
+        mode: "isolated",
+        workspaceId: "",
+      }),
+    ).toEqual({
+      mode: "isolated",
+    });
+    expect(
+      parseIssueExecutionWorkspaceSettings({
+        mode: "isolated",
+      }),
+    ).toEqual({
+      mode: "isolated",
+    });
+  });
 });

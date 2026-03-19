@@ -62,10 +62,12 @@ export function parseIssueExecutionWorkspaceSettings(raw: unknown): IssueExecuti
   const parsed = parseObject(raw);
   if (Object.keys(parsed).length === 0) return null;
   const mode = asString(parsed.mode, "");
+  const workspaceId = asString(parsed.workspaceId, "");
   return {
     ...(mode === "inherit" || mode === "project_primary" || mode === "isolated" || mode === "agent_default"
       ? { mode }
       : {}),
+    ...(workspaceId ? { workspaceId } : {}),
     ...(parseExecutionWorkspaceStrategy(parsed.workspaceStrategy)
       ? { workspaceStrategy: parseExecutionWorkspaceStrategy(parsed.workspaceStrategy) }
       : {}),

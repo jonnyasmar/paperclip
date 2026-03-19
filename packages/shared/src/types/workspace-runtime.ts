@@ -24,6 +24,7 @@ export interface ProjectExecutionWorkspacePolicy {
 
 export interface IssueExecutionWorkspaceSettings {
   mode?: ExecutionWorkspaceMode;
+  workspaceId?: string | null;
   workspaceStrategy?: ExecutionWorkspaceStrategy | null;
   workspaceRuntime?: Record<string, unknown> | null;
 }

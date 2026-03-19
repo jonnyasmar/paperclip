@@ -869,7 +869,7 @@ export function heartbeatService(db: Db) {
     agent: typeof agents.$inferSelect,
     context: Record<string, unknown>,
     previousSessionParams: Record<string, unknown> | null,
-    opts?: { useProjectWorkspace?: boolean | null },
+    opts?: { useProjectWorkspace?: boolean | null; preferredWorkspaceId?: string | null },
   ): Promise<ResolvedWorkspaceForRun> {
     const issueId = readNonEmptyString(context.issueId);
     const contextProjectId = readNonEmptyString(context.projectId);
@@ -905,8 +905,36 @@ export function heartbeatService(db: Db) {
     }));
 
     if (projectWorkspaceRows.length > 0) {
+      const preferredWorkspaceId = opts?.preferredWorkspaceId;
       const missingProjectCwds: string[] = [];
       let hasConfiguredProjectCwd = false;
+
+      // If a preferred workspace is specified, try it first
+      if (preferredWorkspaceId) {
+        const preferred = projectWorkspaceRows.find((w) => w.id === preferredWorkspaceId);
+        if (preferred) {
+          const preferredCwd = readNonEmptyString(preferred.cwd);
+          if (preferredCwd && preferredCwd !== REPO_ONLY_CWD_SENTINEL) {
+            const preferredCwdExists = await fs
+              .stat(preferredCwd)
+              .then((stats) => stats.isDirectory())
+              .catch(() => false);
+            if (preferredCwdExists) {
+              return {
+                cwd: preferredCwd,
+                source: "project_primary" as const,
+                projectId: resolvedProjectId,
+                workspaceId: preferred.id,
+                repoUrl: preferred.repoUrl,
+                repoRef: preferred.repoRef,
+                workspaceHints,
+                warnings: [],
+              };
+            }
+          }
+        }
+      }
+
       for (const workspace of projectWorkspaceRows) {
         const projectCwd = readNonEmptyString(workspace.cwd);
         if (!projectCwd || projectCwd === REPO_ONLY_CWD_SENTINEL) {
@@ -1619,7 +1647,10 @@ export function heartbeatService(db: Db) {
       agent,
       context,
       previousSessionParams,
-      { useProjectWorkspace: executionWorkspaceMode !== "agent_default" },
+      {
+        useProjectWorkspace: executionWorkspaceMode !== "agent_default",
+        preferredWorkspaceId: issueExecutionWorkspaceSettings?.workspaceId ?? null,
+      },
     );
     const workspaceManagedConfig = buildExecutionWorkspaceAdapterConfig({
       agentConfig: config,
