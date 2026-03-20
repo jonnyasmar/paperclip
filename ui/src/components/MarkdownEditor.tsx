@@ -368,10 +368,11 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
   }, [decorateProjectMentions, value]);
 
   const selectMention = useCallback(
-    (option: MentionOption) => {
-      // Read from ref to avoid stale-closure issues (selectionchange can
-      // update state between the last render and this callback firing).
-      const state = mentionStateRef.current;
+    (option: MentionOption, stateOverride?: MentionState | null) => {
+      // Use provided state snapshot if available, otherwise read from ref.
+      // The override is needed because selectionchange can clear the ref
+      // between mousedown and this callback firing.
+      const state = stateOverride ?? mentionStateRef.current;
       if (!state) return;
 
       if (option.kind === "project" && option.projectId) {
@@ -391,73 +392,55 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
         return;
       }
 
+      // Replace @query via Lexical's markdown API — document.execCommand is
+      // deprecated and Lexical reverts direct DOM mutations during reconciliation.
+      const current = latestValueRef.current;
       const replacement = mentionMarkdown(option);
-
-      // Replace @query directly via DOM selection so the cursor naturally
-      // lands after the inserted text. Lexical picks up the change through
-      // its normal input-event handling.
-      const sel = window.getSelection();
-      if (sel && state.textNode.isConnected) {
-        const range = document.createRange();
-        range.setStart(state.textNode, state.atPos);
-        range.setEnd(state.textNode, state.endPos);
-        sel.removeAllRanges();
-        sel.addRange(range);
-        document.execCommand("insertText", false, replacement);
-
-        // After Lexical reconciles the DOM, the cursor position set by
-        // execCommand may be lost. Explicitly reposition it after the
-        // inserted mention text.
-        const cursorTarget = state.atPos + replacement.length;
-        requestAnimationFrame(() => {
-          const newSel = window.getSelection();
-          if (!newSel) return;
-          // Try the original text node first (it may still be valid)
-          if (state.textNode.isConnected) {
-            const len = state.textNode.textContent?.length ?? 0;
-            if (cursorTarget <= len) {
-              const r = document.createRange();
-              r.setStart(state.textNode, cursorTarget);
-              r.collapse(true);
-              newSel.removeAllRanges();
-              newSel.addRange(r);
-              return;
-            }
-          }
-          // Fallback: search for the replacement in text nodes
-          const editable = containerRef.current?.querySelector('[contenteditable="true"]');
-          if (!editable) return;
-          const walker = document.createTreeWalker(editable, NodeFilter.SHOW_TEXT);
-          let node: Text | null;
-          while ((node = walker.nextNode() as Text | null)) {
-            const text = node.textContent ?? "";
-            const idx = text.indexOf(replacement);
-            if (idx !== -1) {
-              const pos = idx + replacement.length;
-              if (pos <= text.length) {
-                const r = document.createRange();
-                r.setStart(node, pos);
-                r.collapse(true);
-                newSel.removeAllRanges();
-                newSel.addRange(r);
-                return;
-              }
-            }
-          }
-        });
-      } else {
-        // Fallback: full markdown replacement when DOM node is stale
-        const current = latestValueRef.current;
-        const next = applyMention(current, state.query, option);
-        if (next !== current) {
-          latestValueRef.current = next;
-          ref.current?.setMarkdown(next);
-          onChange(next);
-        }
-        requestAnimationFrame(() => {
-          ref.current?.focus(undefined, { defaultSelection: "rootEnd" });
-        });
+      const next = applyMention(current, state.query, option);
+      if (next !== current) {
+        latestValueRef.current = next;
+        ref.current?.setMarkdown(next);
+        onChange(next);
       }
+      // Place cursor after the inserted mention. Use setTimeout to ensure
+      // Lexical has fully reconciled the DOM after setMarkdown.
+      setTimeout(() => {
+        const editable = containerRef.current?.querySelector('[contenteditable="true"]');
+        if (!editable) {
+          ref.current?.focus(undefined, { defaultSelection: "rootEnd" });
+          return;
+        }
+        // Find the mention text in the DOM and place cursor after it
+        const mentionNoSpace = replacement.trimEnd();
+        const walker = document.createTreeWalker(editable, NodeFilter.SHOW_TEXT);
+        let node: Text | null;
+        let placed = false;
+        while ((node = walker.nextNode() as Text | null)) {
+          const text = node.textContent ?? "";
+          const idx = text.indexOf(mentionNoSpace);
+          if (idx !== -1) {
+            const pos = Math.min(idx + mentionNoSpace.length, text.length);
+            const sel = window.getSelection();
+            if (sel) {
+              const r = document.createRange();
+              r.setStart(node, pos);
+              r.collapse(true);
+              sel.removeAllRanges();
+              sel.addRange(r);
+              placed = true;
+            }
+            break;
+          }
+        }
+        if (!placed) {
+          ref.current?.focus(undefined, { defaultSelection: "rootEnd" });
+        }
+        // Insert trailing space via execCommand after cursor is positioned.
+        // Needs its own tick so Lexical processes the cursor change first.
+        requestAnimationFrame(() => {
+          document.execCommand("insertText", false, " ");
+        });
+      }, 50);
 
       requestAnimationFrame(() => {
         decorateProjectMentions();
@@ -526,7 +509,8 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
             if (e.key === "Enter" || e.key === "Tab") {
               e.preventDefault();
               e.stopPropagation();
-              selectMention(filteredMentions[mentionIndex]);
+              const snapshot = mentionStateRef.current;
+              selectMention(filteredMentions[mentionIndex], snapshot);
               return;
             }
           }
@@ -584,7 +568,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
               )}
               onMouseDown={(e) => {
                 e.preventDefault(); // prevent blur
-                selectMention(option);
+                // Snapshot state before selectionchange can clear the ref
+                const snapshot = mentionStateRef.current;
+                selectMention(option, snapshot);
               }}
               onMouseEnter={() => setMentionIndex(i)}
             >

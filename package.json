@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "prod": "pnpm build && concurrently --names server,locks,ci,worktrees --prefix-colors blue,yellow,magenta,cyan --prefix '[{name}]' 'pnpm prod:server' 'pnpm prod:locks' 'pnpm prod:ci' 'pnpm prod:worktrees'",
+    "dev:prod": "concurrently --names server,locks,ci,worktrees --prefix-colors blue,yellow,magenta,cyan --prefix '[{name}]' 'pnpm dev' 'pnpm prod:locks' 'pnpm prod:ci' 'pnpm prod:worktrees'",
     "prod:server": "node --import ./server/node_modules/tsx/dist/loader.mjs server/dist/index.js",
     "prod:locks": "bash ~/asmar-inc/scripts/loop-locks.sh",
     "prod:ci": "bash ~/asmar-inc/scripts/loop-ci.sh",
