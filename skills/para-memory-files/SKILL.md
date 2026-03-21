@@ -95,7 +95,9 @@ qmd search "specific phrase"              # BM25 keyword search
 qmd vsearch "conceptual question"         # Pure vector similarity
 ```
 
-Index your personal folder: `qmd index $AGENT_HOME`
+- Index your personal folder: `qmd collection add $AGENT_HOME`
+- Index the knowledge base: `qmd collection add /Users/jonnyasmar/asmar-inc/asmar-inc-kb`
+- Update the embeddings & index: `qmd embed && qmd update`
 
 Vectors + BM25 + reranking finds things even when the wording differs.
 

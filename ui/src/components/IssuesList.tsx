@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
 import { issuesApi } from "../api/issues";
+import { costsApi } from "../api/costs";
 import { authApi } from "../api/auth";
 import { queryKeys } from "../lib/queryKeys";
 import { formatAssigneeUserLabel } from "../lib/assignees";
@@ -181,6 +182,22 @@ export function IssuesList({
     queryFn: () => authApi.getSession(),
   });
   const currentUserId = session?.user?.id ?? session?.session?.userId ?? null;
+
+  // Fetch cost data for kanban board cards
+  const issueIds = useMemo(() => issues.map((i) => i.id), [issues]);
+  const { data: costByIssueData } = useQuery({
+    queryKey: ["costs", "by-issue", selectedCompanyId, issueIds],
+    queryFn: () => costsApi.byIssue(selectedCompanyId!, issueIds),
+    enabled: !!selectedCompanyId && issueIds.length > 0 && issueIds.length <= 500,
+    staleTime: 60_000,
+  });
+  const costByIssue = useMemo(() => {
+    const map = new Map<string, (typeof costByIssueData extends (infer T)[] | undefined ? T : never)>();
+    for (const row of costByIssueData ?? []) {
+      if (row.issueId) map.set(row.issueId, row);
+    }
+    return map;
+  }, [costByIssueData]);
 
   // Scope the storage key per company so folding/view state is independent across companies.
   const scopedKey = selectedCompanyId ? `${viewStateKey}:${selectedCompanyId}` : viewStateKey;
@@ -597,6 +614,7 @@ export function IssuesList({
           issues={filtered}
           agents={agents}
           liveIssueIds={liveIssueIds}
+          costByIssue={costByIssue}
           onUpdateIssue={onUpdateIssue}
         />
       ) : (

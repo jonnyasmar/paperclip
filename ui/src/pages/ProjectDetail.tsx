@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation, Navigate } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PROJECT_COLORS, isUuidLike, type BudgetPolicySummary } from "@paperclipai/shared";
 import { budgetsApi } from "../api/budgets";
+import { costsApi } from "../api/costs";
 import { projectsApi } from "../api/projects";
 import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
@@ -23,6 +24,13 @@ import { projectRouteRef, cn } from "../lib/utils";
 import { Tabs } from "@/components/ui/tabs";
 import { PluginLauncherOutlet } from "@/plugins/launchers";
 import { PluginSlotMount, PluginSlotOutlet, usePluginSlots } from "@/plugins/slots";
+
+function formatTokenCount(n: number): string {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
 
 /* ── Top-level tab types ── */
 
@@ -239,6 +247,18 @@ export function ProjectDetail() {
   const canonicalProjectRef = project ? projectRouteRef(project) : routeProjectRef;
   const projectLookupRef = project?.id ?? routeProjectRef;
   const resolvedCompanyId = project?.companyId ?? selectedCompanyId;
+
+  const { data: projectCosts } = useQuery({
+    queryKey: ["costs", "by-project", resolvedCompanyId],
+    queryFn: () => costsApi.byProject(resolvedCompanyId!),
+    enabled: !!resolvedCompanyId,
+    staleTime: 60_000,
+  });
+  const projectCost = useMemo(() => {
+    if (!projectCosts || !project) return null;
+    return projectCosts.find((c) => c.projectId === project.id) ?? null;
+  }, [projectCosts, project]);
+
   const {
     slots: pluginDetailSlots,
     isLoading: pluginDetailSlotsLoading,
@@ -490,6 +510,20 @@ export function ProjectDetail() {
               Paused by budget hard stop
             </div>
           ) : null}
+          {projectCost && (projectCost.inputTokens + projectCost.outputTokens) > 0 && (
+            <div
+              className="inline-flex items-center gap-2 text-xs text-muted-foreground font-mono tabular-nums"
+              title={`${(projectCost.inputTokens + projectCost.outputTokens).toLocaleString()} tokens (${projectCost.inputTokens.toLocaleString()} in / ${projectCost.cachedInputTokens.toLocaleString()} cached / ${projectCost.outputTokens.toLocaleString()} out)${projectCost.costCents > 0 ? ` — $${(projectCost.costCents / 100).toFixed(2)}` : ""}`}
+            >
+              <span>{formatTokenCount(projectCost.inputTokens + projectCost.outputTokens)} tokens</span>
+              {projectCost.costCents > 0 && (
+                <>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span>${(projectCost.costCents / 100).toFixed(2)}</span>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

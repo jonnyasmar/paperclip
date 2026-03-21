@@ -111,3 +111,12 @@ export interface CostByProject {
   cachedInputTokens: number;
   outputTokens: number;
 }
+
+/** cost aggregated by issue */
+export interface CostByIssue {
+  issueId: string;
+  costCents: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+}

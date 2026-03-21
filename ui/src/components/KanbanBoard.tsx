@@ -20,7 +20,7 @@ import {
 import { StatusIcon } from "./StatusIcon";
 import { PriorityIcon } from "./PriorityIcon";
 import { Identity } from "./Identity";
-import type { Issue } from "@paperclipai/shared";
+import type { Issue, CostByIssue } from "@paperclipai/shared";
 
 const boardStatuses = [
   "backlog",
@@ -45,6 +45,7 @@ interface KanbanBoardProps {
   issues: Issue[];
   agents?: Agent[];
   liveIssueIds?: Set<string>;
+  costByIssue?: Map<string, CostByIssue>;
   onUpdateIssue: (id: string, data: Record<string, unknown>) => void;
 }
 
@@ -55,11 +56,13 @@ function KanbanColumn({
   issues,
   agents,
   liveIssueIds,
+  costByIssue,
 }: {
   status: string;
   issues: Issue[];
   agents?: Agent[];
   liveIssueIds?: Set<string>;
+  costByIssue?: Map<string, CostByIssue>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
 
@@ -90,6 +93,7 @@ function KanbanColumn({
               issue={issue}
               agents={agents}
               isLive={liveIssueIds?.has(issue.id)}
+              cost={costByIssue?.get(issue.id)}
             />
           ))}
         </SortableContext>
@@ -100,16 +104,32 @@ function KanbanColumn({
 
 /* ── Draggable Card ── */
 
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+function formatCost(cents: number): string {
+  if (cents === 0) return "$0";
+  const dollars = cents / 100;
+  if (dollars < 0.01) return `<$0.01`;
+  if (dollars < 1) return `$${dollars.toFixed(2)}`;
+  return `$${dollars.toFixed(2)}`;
+}
+
 function KanbanCard({
   issue,
   agents,
   isLive,
   isOverlay,
+  cost,
 }: {
   issue: Issue;
   agents?: Agent[];
   isLive?: boolean;
   isOverlay?: boolean;
+  cost?: CostByIssue;
 }) {
   const {
     attributes,
@@ -172,6 +192,20 @@ function KanbanCard({
               </span>
             );
           })()}
+          {cost && (cost.inputTokens + cost.outputTokens) > 0 && (
+            <span
+              className="ml-auto flex items-center gap-1.5 text-[10px] text-muted-foreground/70 font-mono tabular-nums"
+              title={`${(cost.inputTokens + cost.outputTokens).toLocaleString()} tokens (${cost.inputTokens.toLocaleString()} in / ${cost.outputTokens.toLocaleString()} out)${cost.costCents > 0 ? ` — ${formatCost(cost.costCents)}` : ""}`}
+            >
+              <span>{formatTokens(cost.inputTokens + cost.outputTokens)} tok</span>
+              {cost.costCents > 0 && (
+                <>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span>{formatCost(cost.costCents)}</span>
+                </>
+              )}
+            </span>
+          )}
         </div>
       </Link>
     </div>
@@ -184,6 +218,7 @@ export function KanbanBoard({
   issues,
   agents,
   liveIssueIds,
+  costByIssue,
   onUpdateIssue,
 }: KanbanBoardProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -261,12 +296,13 @@ export function KanbanBoard({
             issues={columnIssues[status] ?? []}
             agents={agents}
             liveIssueIds={liveIssueIds}
+            costByIssue={costByIssue}
           />
         ))}
       </div>
       <DragOverlay>
         {activeIssue ? (
-          <KanbanCard issue={activeIssue} agents={agents} isOverlay />
+          <KanbanCard issue={activeIssue} agents={agents} isOverlay cost={costByIssue?.get(activeIssue.id)} />
         ) : null}
       </DragOverlay>
     </DndContext>

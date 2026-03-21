@@ -187,6 +187,62 @@ function mentionChipStyle(color: string | null): CSSProperties | undefined {
   };
 }
 
+/**
+ * Escape bare `<` characters that would be misinterpreted as JSX/HTML tags by
+ * the MDX parser.  We only touch `<` that is NOT:
+ *   - inside an inline code span (backticks)
+ *   - part of a valid HTML tag (e.g. `<br>`, `<div ...>`, `</p>`, `<!-- -->`)
+ *   - already an HTML entity (`&lt;`)
+ *
+ * Everything else (like `<250ms` or `<foo` where foo isn't a known tag) gets
+ * rewritten to `&lt;` so the MDX parser doesn't choke.
+ */
+function escapeBareAngleBrackets(md: string): string {
+  // Valid self-closing / block HTML tags that MDX should handle natively.
+  // We don't need an exhaustive list — just the ones that commonly appear in
+  // user-authored markdown.  Unknown tags (e.g. `<250ms`) are the problem.
+  const HTML_TAG_RE =
+    /^<(\/?\s*(?:a|abbr|address|area|article|aside|audio|b|base|bdi|bdo|blockquote|body|br|button|canvas|caption|cite|code|col|colgroup|data|datalist|dd|del|details|dfn|dialog|div|dl|dt|em|embed|fieldset|figcaption|figure|footer|form|h[1-6]|head|header|hgroup|hr|html|i|iframe|img|input|ins|kbd|label|legend|li|link|main|map|mark|meta|meter|nav|noscript|object|ol|optgroup|option|output|p|param|picture|pre|progress|q|rp|rt|ruby|s|samp|script|section|select|slot|small|source|span|strong|style|sub|summary|sup|table|tbody|td|template|textarea|tfoot|th|thead|time|title|tr|track|u|ul|var|video|wbr)(?:\s|\/?>|>))|^<!--/i;
+
+  let result = "";
+  let i = 0;
+  while (i < md.length) {
+    // Skip inline code spans — content inside backticks is literal
+    if (md[i] === "`") {
+      const fenceEnd = md[i + 1] === "`" && md[i + 2] === "`"
+        ? md.indexOf("```", i + 3)
+        : md.indexOf("`", i + 1);
+      if (fenceEnd === -1) {
+        // Unterminated code span — just pass through the rest
+        result += md.slice(i);
+        break;
+      }
+      const end = md[i + 1] === "`" && md[i + 2] === "`" ? fenceEnd + 3 : fenceEnd + 1;
+      result += md.slice(i, end);
+      i = end;
+      continue;
+    }
+
+    if (md[i] === "<") {
+      const rest = md.slice(i);
+      if (HTML_TAG_RE.test(rest)) {
+        // Valid HTML tag — pass through
+        result += "<";
+        i++;
+      } else {
+        // Bare < that would break MDX — escape it
+        result += "&lt;";
+        i++;
+      }
+      continue;
+    }
+
+    result += md[i];
+    i++;
+  }
+  return result;
+}
+
 /* ---- Component ---- */
 
 export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>(function MarkdownEditor({
@@ -280,12 +336,14 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
     return all;
   }, [hasImageUpload]);
 
+  const safeValue = useMemo(() => escapeBareAngleBrackets(value), [value]);
+
   useEffect(() => {
     if (value !== latestValueRef.current) {
-      ref.current?.setMarkdown(value);
+      ref.current?.setMarkdown(safeValue);
       latestValueRef.current = value;
     }
-  }, [value]);
+  }, [value, safeValue]);
 
   const decorateProjectMentions = useCallback(() => {
     const editable = containerRef.current?.querySelector('[contenteditable="true"]');
@@ -538,7 +596,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
     >
       <MDXEditor
         ref={ref}
-        markdown={value}
+        markdown={safeValue}
         placeholder={placeholder}
         onChange={(next) => {
           latestValueRef.current = next;

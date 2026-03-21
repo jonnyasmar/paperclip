@@ -165,6 +165,7 @@ export type {
   CostByAgentModel,
   CostWindowSpendRow,
   CostByProject,
+  CostByIssue,
   FinanceEvent,
   FinanceSummary,
   FinanceByBiller,

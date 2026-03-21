@@ -247,6 +247,23 @@ export function costRoutes(db: Db) {
     res.json(rows);
   });
 
+  router.post("/companies/:companyId/costs/by-issue", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+    const range = parseDateRange(req.query);
+    const issueIds = req.body?.issueIds;
+    if (!Array.isArray(issueIds) || issueIds.length === 0) {
+      res.status(400).json({ error: "issueIds array required in body" });
+      return;
+    }
+    if (issueIds.length > 500) {
+      res.status(400).json({ error: "issueIds must contain at most 500 IDs" });
+      return;
+    }
+    const rows = await costs.byIssue(companyId, issueIds, range);
+    res.json(rows);
+  });
+
   router.patch("/companies/:companyId/budgets", validate(updateBudgetSchema), async (req, res) => {
     assertBoard(req);
     const companyId = req.params.companyId as string;
