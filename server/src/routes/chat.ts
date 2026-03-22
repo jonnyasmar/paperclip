@@ -496,19 +496,21 @@ export function chatRoutes(db: Db) {
     assertBoard(req);
     const runId = req.params.runId as string;
 
-    // Get the running process info
-    const runningProcess = runningProcesses.get(runId);
-    if (!runningProcess) {
-      throw notFound("No running process found for this run");
-    }
-
-    // Get the run from DB to find agent + session
+    // Get the run from DB
     const [run] = await db
       .select()
       .from(heartbeatRuns)
       .where(eq(heartbeatRuns.id, runId))
       .limit(1);
     if (!run) throw notFound("Run not found");
+
+    // Kill the running process if it exists
+    const runningProcess = runningProcesses.get(runId);
+    if (runningProcess) {
+      logger.info({ runId }, "chat: killing running process for injection");
+    } else {
+      logger.info({ runId, status: run.status }, "chat: no running process found (may have just finished)");
+    }
 
     // Extract session ID from the run log BEFORE killing the process
     // (sessionIdAfter is null while running — we need to parse the log)
@@ -582,14 +584,16 @@ export function chatRoutes(db: Db) {
       }
     }
 
-    // Kill the running process
-    runningProcess.child.kill("SIGTERM");
-    const graceMs = Math.max(1, runningProcess.graceSec) * 1000;
-    setTimeout(() => {
-      if (!runningProcess.child.killed) {
-        runningProcess.child.kill("SIGKILL");
-      }
-    }, graceMs);
+    // Kill the running process if it's still active
+    if (runningProcess) {
+      runningProcess.child.kill("SIGTERM");
+      const graceMs = Math.max(1, runningProcess.graceSec) * 1000;
+      setTimeout(() => {
+        if (!runningProcess.child.killed) {
+          runningProcess.child.kill("SIGKILL");
+        }
+      }, graceMs);
+    }
 
     // Get agent info
     const agent = await agents.getById(run.agentId);

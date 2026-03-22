@@ -1515,10 +1515,10 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: Heartb
                     size="sm"
                     className="text-xs h-6 px-2"
                     onClick={() =>
-                      void openRunChat(
+                      openRunChat(
                         run.id,
                         { id: run.agentId, name: agentRouteId },
-                      )
+                      ).catch((e) => console.error("openRunChat failed:", e))
                     }
                   >
                     <MessageCircle className="h-3.5 w-3.5 mr-1" />

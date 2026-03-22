@@ -712,11 +712,11 @@ export function IssueDetail() {
                   <button
                     type="button"
                     onClick={() =>
-                      void openRunChat(
+                      openRunChat(
                         liveRun.id,
                         { id: agent.id, name: agent.name, icon: agent.icon },
                         issue?.title,
-                      )
+                      ).catch((e) => console.error("openRunChat failed:", e))
                     }
                     className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 border border-blue-500/30 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 transition-colors shrink-0"
                   >
