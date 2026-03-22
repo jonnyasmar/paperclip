@@ -445,12 +445,6 @@ export function shouldResetTaskSessionForWake(
 
   const wakeReason = readNonEmptyString(contextSnapshot?.wakeReason);
   if (wakeReason === "issue_assigned") return true;
-
-  // Timer/cron wakes must start fresh — resuming a stale session causes
-  // proactive agents to skip their HEARTBEAT.md duties because the model
-  // "remembers" already finishing its work in the prior run.
-  if (wakeReason === "heartbeat_timer") return true;
-
   return false;
 }
 
@@ -461,7 +455,6 @@ function describeSessionResetReason(
 
   const wakeReason = readNonEmptyString(contextSnapshot?.wakeReason);
   if (wakeReason === "issue_assigned") return "wake reason is issue_assigned";
-  if (wakeReason === "heartbeat_timer") return "timer/cron wakes always start fresh";
   return null;
 }
 
