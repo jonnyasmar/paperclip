@@ -722,7 +722,7 @@ export function chatRoutes(db: Db) {
 
   // GET /chats/file/:filename — Serve uploaded files for rendering in chat
   router.get("/chats/file/:filename", (req: Request, res: Response) => {
-    const filename = req.params.filename;
+    const filename = req.params.filename as string;
     if (!filename || filename.includes("..") || filename.includes("/")) {
       res.status(400).json({ error: "Invalid filename" });
       return;
