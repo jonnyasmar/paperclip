@@ -263,7 +263,9 @@ export function SidebarAgents() {
 
   const handleChatClick = useCallback(
     (agent: Agent) => {
-      void openChat({ id: agent.id, name: agent.name, icon: agent.icon });
+      openChat({ id: agent.id, name: agent.name, icon: agent.icon }).catch(() => {
+        // Ignore — may fail if agent not available
+      });
       if (isMobile) setSidebarOpen(false);
     },
     [openChat, isMobile, setSidebarOpen],
