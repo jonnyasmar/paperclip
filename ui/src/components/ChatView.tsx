@@ -520,13 +520,13 @@ export function ChatView({
 
       {/* Input bar */}
       <div className="border-t border-border p-3 bg-background" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
-        <div className="flex items-end gap-2">
+        <div className="flex items-center gap-2">
           {/* Attachment button (skeleton, disabled) */}
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="text-muted-foreground/40 shrink-0 mb-[3px]"
+            className="text-muted-foreground/40 shrink-0"
             disabled
             title="File attachments (coming soon)"
           >
@@ -542,7 +542,7 @@ export function ChatView({
               placeholder="Type a message... (Cmd+Enter to send)"
               rows={1}
               className={cn(
-                "w-full resize-none overflow-hidden rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm",
+                "w-full resize-none overflow-hidden rounded-lg border border-border bg-muted/30 px-3 py-[7px] text-sm leading-snug",
                 "placeholder:text-muted-foreground/50",
                 "focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent",
                 "max-h-40 scrollbar-thin",
@@ -556,7 +556,7 @@ export function ChatView({
               type="button"
               variant="ghost"
               size="icon-sm"
-              className="text-muted-foreground/60 hover:text-foreground shrink-0 mb-[3px]"
+              className="text-muted-foreground/60 hover:text-foreground shrink-0"
               onClick={handleVoice}
               title="Voice input"
             >
@@ -568,7 +568,7 @@ export function ChatView({
           <Button
             type="button"
             size="icon-sm"
-            className="shrink-0 mb-[3px]"
+            className="shrink-0"
             disabled={!inputValue.trim() || isStreaming}
             onClick={handleSend}
             title="Send message"
