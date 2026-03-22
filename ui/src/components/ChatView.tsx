@@ -284,15 +284,15 @@ function ThinkingBlock({ text, streaming }: { text: string; streaming?: boolean 
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 text-[11px] text-muted-foreground/40 hover:text-muted-foreground/60 transition-colors"
+        className="flex items-center gap-1 text-xs text-muted-foreground/50 hover:text-muted-foreground/70 transition-colors"
       >
-        {expanded ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />}
+        {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
         <span className="italic">Thinking{streaming ? "..." : ""}</span>
       </button>
       {expanded && (
         <div
           ref={scrollRef}
-          className="max-h-32 overflow-y-auto text-[11px] text-muted-foreground/35 italic whitespace-pre-wrap leading-relaxed pl-3.5"
+          className="max-h-32 overflow-y-auto text-xs text-muted-foreground/50 italic whitespace-pre-wrap leading-relaxed pl-4"
         >
           {text}
         </div>
@@ -302,27 +302,27 @@ function ThinkingBlock({ text, streaming }: { text: string; streaming?: boolean 
 }
 
 function ToolCallBlock({ toolCall }: { toolCall: ToolCall }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
 
   return (
-    <div className="mb-0.5">
+    <div className="mb-1">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 text-[11px] text-muted-foreground/40 hover:text-muted-foreground/60 transition-colors"
+        className="flex items-center gap-1 text-xs text-muted-foreground/50 hover:text-muted-foreground/70 transition-colors"
       >
-        <Wrench className="h-2.5 w-2.5" />
+        <Wrench className="h-3 w-3" />
         <span className="font-mono">{toolCall.name}</span>
-        {toolCall.result && <span className="text-green-400/50 text-[9px]">✓</span>}
-        {expanded ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />}
+        {toolCall.result && <span className="text-green-500/60 text-[10px]">✓</span>}
+        {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
       </button>
       {expanded && (
-        <div className="pl-3.5 mt-0.5">
-          <pre className="text-[10px] text-muted-foreground/30 overflow-x-auto max-h-32 overflow-y-auto whitespace-pre-wrap">
+        <div className="pl-4 mt-0.5">
+          <pre className="text-[11px] text-muted-foreground/40 overflow-x-auto max-h-32 overflow-y-auto whitespace-pre-wrap">
             {toolCall.args}
           </pre>
           {toolCall.result && (
-            <pre className="text-[10px] text-muted-foreground/30 overflow-x-auto max-h-32 overflow-y-auto whitespace-pre-wrap mt-1 pt-1 border-t border-muted-foreground/10">
+            <pre className="text-[11px] text-muted-foreground/40 overflow-x-auto max-h-32 overflow-y-auto whitespace-pre-wrap mt-1 pt-1 border-t border-muted-foreground/15">
               {toolCall.result}
             </pre>
           )}
