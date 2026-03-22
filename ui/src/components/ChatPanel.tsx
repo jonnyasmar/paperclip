@@ -289,14 +289,17 @@ export function ChatPanel() {
   return (
     <Sheet
       open={isChatPanelOpen}
-      onOpenChange={(open) => {
-        if (!open) handleClose();
+      onOpenChange={() => {
+        // Controlled — only close via explicit X button
       }}
+      modal={false}
     >
       <SheetContent
         side="right"
         showCloseButton={false}
         className="w-full sm:max-w-lg p-0 flex flex-col"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
       >
         {activeChat ? (
           <>
