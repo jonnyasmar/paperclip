@@ -145,8 +145,9 @@ function spawnChatMessage(
     Connection: "keep-alive",
   });
 
+  const envKeys = Object.keys(envOverrides);
   logger.info(
-    { chatId: session.chatId, command, args: args.slice(0, 4), cwd },
+    { chatId: session.chatId, command, args: args.slice(0, 4), cwd, envOverrideKeys: envKeys },
     "chat: spawning claude process",
   );
 
