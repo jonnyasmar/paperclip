@@ -21,12 +21,20 @@ interface ToolCall {
   result?: string;
 }
 
+interface Attachment {
+  path: string;
+  name: string;
+  isImage: boolean;
+  mimetype: string;
+}
+
 interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   thinking?: string;
   toolCalls?: ToolCall[];
+  attachments?: Attachment[];
   streaming?: boolean;
   timestamp: Date;
 }
@@ -75,12 +83,22 @@ function useStreamingChat(
   const abortRef = useRef<AbortController | null>(null);
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, attachments?: Attachment[]) => {
+      // Build message with attachment references
+      let fullMessage = text;
+      if (attachments?.length) {
+        const fileRefs = attachments.map((a) =>
+          a.isImage ? `[Attached image: ${a.name}] (path: ${a.path})` : `[Attached file: ${a.name}] (path: ${a.path})`
+        ).join("\n");
+        fullMessage = `${fileRefs}\n\n${text}`;
+      }
+
       // Add user message
       const userMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "user",
         content: text,
+        attachments,
         timestamp: new Date(),
       };
 
@@ -110,7 +128,7 @@ function useStreamingChat(
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ chatId, message: text }),
+          body: JSON.stringify({ chatId, message: fullMessage }),
           signal: controller.signal,
         });
 
@@ -362,6 +380,20 @@ function MessageBubble({
     return (
       <div className="flex justify-end mb-4">
         <div className="max-w-[80%]">
+          {message.attachments && message.attachments.length > 0 && (
+            <div className="flex gap-1.5 mb-1.5 justify-end flex-wrap">
+              {message.attachments.map((att, i) =>
+                att.isImage ? (
+                  <img key={i} src={`/api/chats/file?path=${encodeURIComponent(att.path)}`} alt={att.name} className="max-h-40 rounded-lg border border-white/20" />
+                ) : (
+                  <div key={i} className="flex items-center gap-1.5 rounded-lg bg-blue-700 px-2.5 py-1.5 text-xs text-white/80">
+                    <Paperclip className="h-3 w-3" />
+                    {att.name}
+                  </div>
+                ),
+              )}
+            </div>
+          )}
           <div className="rounded-2xl rounded-br-md bg-blue-600 text-white px-4 py-2.5 text-sm shadow-sm">
             <p className="whitespace-pre-wrap">{message.content}</p>
           </div>
@@ -430,9 +462,11 @@ export function ChatView({
     initialMessages,
   );
   const [inputValue, setInputValue] = useState("");
+  const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -449,10 +483,29 @@ export function ChatView({
 
   const handleSend = useCallback(() => {
     const text = inputValue.trim();
-    if (!text || isStreaming) return;
+    if ((!text && pendingAttachments.length === 0) || isStreaming) return;
     setInputValue("");
-    void sendMessage(text);
-  }, [inputValue, isStreaming, sendMessage]);
+    const attachments = pendingAttachments.length > 0 ? [...pendingAttachments] : undefined;
+    setPendingAttachments([]);
+    void sendMessage(text || "See attached file(s).", attachments);
+  }, [inputValue, isStreaming, sendMessage, pendingAttachments]);
+
+  const handleFileUpload = useCallback(async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const res = await fetch(`/api/chats/${chatId}/upload`, {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      if (!res.ok) return;
+      const data = await res.json() as Attachment;
+      setPendingAttachments((prev) => [...prev, data]);
+    } catch {
+      // Upload failed silently
+    }
+  }, [chatId]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -518,17 +571,52 @@ export function ChatView({
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Pending attachments preview */}
+      {pendingAttachments.length > 0 && (
+        <div className="border-t border-border px-3 pt-2 bg-background flex gap-2 flex-wrap">
+          {pendingAttachments.map((att, i) => (
+            <div key={i} className="relative group">
+              {att.isImage ? (
+                <img src={`/api/chats/file?path=${encodeURIComponent(att.path)}`} alt={att.name} className="h-16 w-16 object-cover rounded-md border border-border" />
+              ) : (
+                <div className="h-16 px-3 flex items-center rounded-md border border-border bg-muted/30 text-xs text-muted-foreground">
+                  <Paperclip className="h-3 w-3 mr-1.5 shrink-0" />
+                  <span className="truncate max-w-[100px]">{att.name}</span>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setPendingAttachments((prev) => prev.filter((_, j) => j !== i))}
+                className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Input bar */}
       <div className="border-t border-border p-3 bg-background" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
         <div className="flex items-center gap-2">
-          {/* Attachment button (skeleton, disabled) */}
+          {/* Attachment button */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void handleFileUpload(file);
+              e.target.value = "";
+            }}
+          />
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="text-muted-foreground/40 shrink-0"
-            disabled
-            title="File attachments (coming soon)"
+            className="text-muted-foreground/60 hover:text-foreground shrink-0"
+            onClick={() => fileInputRef.current?.click()}
+            title="Attach file"
           >
             <Paperclip className="h-4 w-4" />
           </Button>

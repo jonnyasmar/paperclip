@@ -1,8 +1,9 @@
 import { Router, type Request, type Response } from "express";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
+import multer from "multer";
 import type { Db } from "@paperclipai/db";
 import { heartbeatRuns } from "@paperclipai/db";
 import { eq } from "drizzle-orm";
@@ -684,6 +685,49 @@ export function chatRoutes(db: Db) {
       spawnChatMessage(session, message, agentConfig, res);
     },
   );
+
+  // POST /chats/:chatId/upload — Upload a file attachment for the chat
+  const uploadDir = path.join(process.env.TMPDIR ?? "/tmp", "paperclip-chat-uploads");
+  mkdirSync(uploadDir, { recursive: true });
+  const upload = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, uploadDir),
+      filename: (_req, file, cb) => cb(null, `${randomUUID()}-${file.originalname}`),
+    }),
+    limits: { fileSize: 20 * 1024 * 1024 }, // 20MB max
+  });
+
+  router.post(
+    "/chats/:chatId/upload",
+    upload.single("file"),
+    (req: Request, res: Response) => {
+      assertBoard(req);
+      const file = req.file;
+      if (!file) {
+        res.status(400).json({ error: "No file provided" });
+        return;
+      }
+
+      const isImage = file.mimetype.startsWith("image/");
+      res.json({
+        path: file.path,
+        name: file.originalname,
+        size: file.size,
+        mimetype: file.mimetype,
+        isImage,
+      });
+    },
+  );
+
+  // GET /chats/file?path=... — Serve uploaded files for rendering in chat
+  router.get("/chats/file", (req: Request, res: Response) => {
+    const filePath = req.query.path as string | undefined;
+    if (!filePath || !filePath.startsWith(uploadDir)) {
+      res.status(400).json({ error: "Invalid file path" });
+      return;
+    }
+    res.sendFile(filePath);
+  });
 
   // DELETE /runs/:runId/chat?chatId=... — Exit injection and resume the run
   router.delete(
