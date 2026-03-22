@@ -711,6 +711,7 @@ export function chatRoutes(db: Db) {
       const isImage = file.mimetype.startsWith("image/");
       res.json({
         path: file.path,
+        filename: file.filename,
         name: file.originalname,
         size: file.size,
         mimetype: file.mimetype,
@@ -719,13 +720,14 @@ export function chatRoutes(db: Db) {
     },
   );
 
-  // GET /chats/file?path=... — Serve uploaded files for rendering in chat
-  router.get("/chats/file", (req: Request, res: Response) => {
-    const filePath = req.query.path as string | undefined;
-    if (!filePath || !filePath.startsWith(uploadDir)) {
-      res.status(400).json({ error: "Invalid file path" });
+  // GET /chats/file/:filename — Serve uploaded files for rendering in chat
+  router.get("/chats/file/:filename", (req: Request, res: Response) => {
+    const filename = req.params.filename;
+    if (!filename || filename.includes("..") || filename.includes("/")) {
+      res.status(400).json({ error: "Invalid filename" });
       return;
     }
+    const filePath = path.join(uploadDir, filename);
     res.sendFile(filePath);
   });
 

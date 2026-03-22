@@ -23,6 +23,7 @@ interface ToolCall {
 
 interface Attachment {
   path: string;
+  filename: string;
   name: string;
   isImage: boolean;
   mimetype: string;
@@ -384,7 +385,7 @@ function MessageBubble({
             <div className="flex gap-1.5 mb-1.5 justify-end flex-wrap">
               {message.attachments.map((att, i) =>
                 att.isImage ? (
-                  <img key={i} src={`/api/chats/file?path=${encodeURIComponent(att.path)}`} alt={att.name} className="max-h-40 rounded-lg border border-white/20" />
+                  <img key={i} src={`/api/chats/file/${att.filename}`} alt={att.name} className="max-h-40 rounded-lg border border-white/20" />
                 ) : (
                   <div key={i} className="flex items-center gap-1.5 rounded-lg bg-blue-700 px-2.5 py-1.5 text-xs text-white/80">
                     <Paperclip className="h-3 w-3" />
@@ -577,7 +578,7 @@ export function ChatView({
           {pendingAttachments.map((att, i) => (
             <div key={i} className="relative group">
               {att.isImage ? (
-                <img src={`/api/chats/file?path=${encodeURIComponent(att.path)}`} alt={att.name} className="h-16 w-16 object-cover rounded-md border border-border" />
+                <img src={`/api/chats/file/${att.filename}`} alt={att.name} className="h-16 w-16 object-cover rounded-md border border-border" />
               ) : (
                 <div className="h-16 px-3 flex items-center rounded-md border border-border bg-muted/30 text-xs text-muted-foreground">
                   <Paperclip className="h-3 w-3 mr-1.5 shrink-0" />
