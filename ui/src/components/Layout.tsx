@@ -17,6 +17,7 @@ import { MobileBottomNav } from "./MobileBottomNav";
 import { WorktreeBanner } from "./WorktreeBanner";
 import { HotRestartBanner } from "./HotRestartBanner";
 import { ChatPanel } from "./ChatPanel";
+import { PullToRefresh } from "./PullToRefresh";
 import { useDialog } from "../context/DialogContext";
 import { usePanel } from "../context/PanelContext";
 import { useCompany } from "../context/CompanyContext";
@@ -416,6 +417,10 @@ export function Layout() {
                   scope="invalid_company_prefix"
                   requestedPrefix={companyPrefix ?? selectedCompany?.issuePrefix}
                 />
+              ) : isMobile ? (
+                <PullToRefresh>
+                  <Outlet />
+                </PullToRefresh>
               ) : (
                 <Outlet />
               )}
