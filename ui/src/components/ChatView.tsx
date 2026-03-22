@@ -542,7 +542,7 @@ export function ChatView({
               placeholder="Type a message... (Cmd+Enter to send)"
               rows={1}
               className={cn(
-                "w-full resize-none overflow-hidden rounded-lg border border-border bg-muted/30 px-3 py-[7px] text-sm leading-snug",
+                "w-full resize-none overflow-hidden rounded-lg border border-border bg-muted/30 px-3 text-sm h-9",
                 "placeholder:text-muted-foreground/50",
                 "focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent",
                 "max-h-40 scrollbar-thin",
