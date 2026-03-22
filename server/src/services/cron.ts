@@ -250,35 +250,42 @@ export function validateCron(expression: string): string | null {
  * @param after — The reference date. The returned date will be strictly after this.
  * @returns The next matching `Date`, or `null` if no match found within the search window.
  */
-export function nextCronTick(cron: ParsedCron, after: Date): Date | null {
-  // Work in local minutes — start from the minute after `after`
+export function nextCronTick(cron: ParsedCron, after: Date, timezone?: string): Date | null {
   const d = new Date(after.getTime());
   // Advance to the next whole minute
   d.setUTCSeconds(0, 0);
   d.setUTCMinutes(d.getUTCMinutes() + 1);
 
   // Safety: search up to 4 years worth of minutes (~2.1M iterations max).
-  // Uses 366 to account for leap years.
   const MAX_CRON_SEARCH_YEARS = 4;
   const maxIterations = MAX_CRON_SEARCH_YEARS * 366 * 24 * 60;
 
   for (let i = 0; i < maxIterations; i++) {
-    const month = d.getUTCMonth() + 1; // 1-12
-    const dayOfMonth = d.getUTCDate(); // 1-31
-    const dayOfWeek = d.getUTCDay(); // 0-6
-    const hour = d.getUTCHours(); // 0-23
-    const minute = d.getUTCMinutes(); // 0-59
+    // Get time components — in the target timezone if specified, otherwise UTC
+    let month: number, dayOfMonth: number, dayOfWeek: number, hour: number, minute: number;
+    if (timezone) {
+      const local = getLocalParts(d, timezone);
+      month = local.month;
+      dayOfMonth = local.day;
+      dayOfWeek = local.dow;
+      hour = local.hour;
+      minute = local.minute;
+    } else {
+      month = d.getUTCMonth() + 1;
+      dayOfMonth = d.getUTCDate();
+      dayOfWeek = d.getUTCDay();
+      hour = d.getUTCHours();
+      minute = d.getUTCMinutes();
+    }
 
     // Check month
     if (!cron.months.includes(month)) {
-      // Skip to the first day of the next matching month
       advanceToNextMonth(d, cron.months);
       continue;
     }
 
     // Check day of month AND day of week (both must match)
     if (!cron.daysOfMonth.includes(dayOfMonth) || !cron.daysOfWeek.includes(dayOfWeek)) {
-      // Advance one day
       d.setUTCDate(d.getUTCDate() + 1);
       d.setUTCHours(0, 0, 0, 0);
       continue;
@@ -286,12 +293,10 @@ export function nextCronTick(cron: ParsedCron, after: Date): Date | null {
 
     // Check hour
     if (!cron.hours.includes(hour)) {
-      // Advance to next matching hour within the day
       const nextHour = findNext(cron.hours, hour);
       if (nextHour !== null) {
         d.setUTCHours(nextHour, 0, 0, 0);
       } else {
-        // No matching hour left today — advance to next day
         d.setUTCDate(d.getUTCDate() + 1);
         d.setUTCHours(0, 0, 0, 0);
       }
@@ -304,7 +309,6 @@ export function nextCronTick(cron: ParsedCron, after: Date): Date | null {
       if (nextMin !== null) {
         d.setUTCMinutes(nextMin, 0, 0);
       } else {
-        // No matching minute left this hour — advance to next hour
         d.setUTCHours(d.getUTCHours() + 1, 0, 0, 0);
       }
       continue;
@@ -314,7 +318,6 @@ export function nextCronTick(cron: ParsedCron, after: Date): Date | null {
     return new Date(d.getTime());
   }
 
-  // No match found within the search window
   return null;
 }
 
@@ -329,9 +332,10 @@ export function nextCronTick(cron: ParsedCron, after: Date): Date | null {
 export function nextCronTickFromExpression(
   expression: string,
   after: Date = new Date(),
+  timezone?: string,
 ): Date | null {
   const cron = parseCron(expression);
-  return nextCronTick(cron, after);
+  return nextCronTick(cron, after, timezone);
 }
 
 /**
@@ -345,7 +349,7 @@ export function nextCronTickFromExpression(
  * @param before — The reference date. The returned date will be at or before this.
  * @returns The most recent matching `Date`, or `null` if no match within the search window.
  */
-export function previousCronTick(cron: ParsedCron, before: Date): Date | null {
+export function previousCronTick(cron: ParsedCron, before: Date, timezone?: string): Date | null {
   const d = new Date(before.getTime());
   // Snap to current minute (floor)
   d.setUTCSeconds(0, 0);
@@ -354,11 +358,21 @@ export function previousCronTick(cron: ParsedCron, before: Date): Date | null {
   const maxIterations = MAX_CRON_SEARCH_YEARS * 366 * 24 * 60;
 
   for (let i = 0; i < maxIterations; i++) {
-    const month = d.getUTCMonth() + 1;
-    const dayOfMonth = d.getUTCDate();
-    const dayOfWeek = d.getUTCDay();
-    const hour = d.getUTCHours();
-    const minute = d.getUTCMinutes();
+    let month: number, dayOfMonth: number, dayOfWeek: number, hour: number, minute: number;
+    if (timezone) {
+      const local = getLocalParts(d, timezone);
+      month = local.month;
+      dayOfMonth = local.day;
+      dayOfWeek = local.dow;
+      hour = local.hour;
+      minute = local.minute;
+    } else {
+      month = d.getUTCMonth() + 1;
+      dayOfMonth = d.getUTCDate();
+      dayOfWeek = d.getUTCDay();
+      hour = d.getUTCHours();
+      minute = d.getUTCMinutes();
+    }
 
     if (
       cron.months.includes(month) &&
@@ -388,9 +402,51 @@ export function previousCronTick(cron: ParsedCron, before: Date): Date | null {
 export function previousCronTickFromExpression(
   expression: string,
   before: Date = new Date(),
+  timezone?: string,
 ): Date | null {
   const cron = parseCron(expression);
-  return previousCronTick(cron, before);
+  return previousCronTick(cron, before, timezone);
+}
+
+// ---------------------------------------------------------------------------
+// Timezone helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract local-time components from a UTC Date in the given IANA timezone.
+ * Uses `Intl.DateTimeFormat` — no external dependencies required.
+ */
+function getLocalParts(
+  d: Date,
+  tz: string,
+): { year: number; month: number; day: number; dow: number; hour: number; minute: number } {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    weekday: "short",
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(d);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parseInt(parts.find((p) => p.type === type)!.value, 10);
+
+  const weekdayStr = parts.find((p) => p.type === "weekday")!.value;
+  const dowMap: Record<string, number> = {
+    Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+  };
+
+  return {
+    year: get("year"),
+    month: get("month"),      // 1-12
+    day: get("day"),           // 1-31
+    dow: dowMap[weekdayStr]!,  // 0-6
+    hour: get("hour") % 24,   // 0-23 (hour12:false can return 24 for midnight in some locales)
+    minute: get("minute"),     // 0-59
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -65,11 +65,11 @@ const SESSIONED_LOCAL_ADAPTERS = new Set([
  * time at or before `now` — if that time falls after `lastRun`, the cron has
  * "fired" and we should trigger a run.
  */
-function shouldCronFire(cronExpressions: string[], lastRun: Date, now: Date): boolean {
+function shouldCronFire(cronExpressions: string[], lastRun: Date, now: Date, timezone?: string): boolean {
   for (const expr of cronExpressions) {
     try {
       const parsed = parseCron(expr);
-      const prev = previousCronTick(parsed, now);
+      const prev = previousCronTick(parsed, now, timezone);
       if (prev && prev.getTime() > lastRun.getTime()) {
         return true;
       }
@@ -1246,10 +1246,17 @@ export function heartbeatService(db: Db) {
       );
     }
 
+    // Parse cronTimezone — optional IANA timezone string (e.g. "America/New_York").
+    // When set, cron expressions are interpreted in this timezone instead of UTC.
+    const cronTimezone = typeof heartbeat.cronTimezone === "string" && heartbeat.cronTimezone.trim().length > 0
+      ? heartbeat.cronTimezone.trim()
+      : undefined;
+
     return {
       enabled: asBoolean(heartbeat.enabled, true),
       intervalSec: Math.max(0, asNumber(heartbeat.intervalSec, 0)),
       cronSchedules,
+      cronTimezone,
       wakeOnDemand: asBoolean(heartbeat.wakeOnDemand ?? heartbeat.wakeOnAssignment ?? heartbeat.wakeOnOnDemand ?? heartbeat.wakeOnAutomation, true),
       maxConcurrentRuns: normalizeMaxConcurrentRuns(heartbeat.maxConcurrentRuns),
     };
@@ -3282,7 +3289,7 @@ export function heartbeatService(db: Db) {
         if (hasCron) {
           // Cron takes precedence: check if any expression would have fired
           // since the last run.
-          if (shouldCronFire(policy.cronSchedules, baseline, now)) {
+          if (shouldCronFire(policy.cronSchedules, baseline, now, policy.cronTimezone)) {
             shouldFire = true;
             reason = "cron_schedule";
           }
