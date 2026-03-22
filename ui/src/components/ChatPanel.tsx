@@ -297,8 +297,8 @@ export function ChatPanel() {
       <SheetContent
         side="right"
         showCloseButton={false}
-        className="w-full sm:max-w-lg p-0 flex flex-col"
-        style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}
+        className="w-full sm:max-w-lg p-0 flex flex-col overflow-hidden"
+        style={{ paddingTop: "env(safe-area-inset-top)" }}
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >

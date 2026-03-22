@@ -9,6 +9,7 @@ import { Send, Mic, Paperclip, ChevronDown, ChevronRight, Wrench, Brain } from "
 import { MarkdownBody } from "./MarkdownBody";
 import { AgentIcon } from "./AgentIconPicker";
 import { Button } from "@/components/ui/button";
+import { useVisualViewport } from "../hooks/useVisualViewport";
 import { cn } from "../lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -349,12 +350,12 @@ function ToolCallBlock({ toolCall }: { toolCall: ToolCall }) {
         {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
       </button>
       {expanded && (
-        <div className="pl-4 mt-0.5">
-          <pre className="text-[11px] text-muted-foreground/60 overflow-x-auto max-h-32 overflow-y-auto whitespace-pre-wrap">
+        <div className="pl-4 mt-0.5 overflow-hidden">
+          <pre className="text-[11px] text-muted-foreground/60 max-h-32 overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words">
             {toolCall.args}
           </pre>
           {toolCall.result && (
-            <pre className="text-[11px] text-muted-foreground/60 overflow-x-auto max-h-32 overflow-y-auto whitespace-pre-wrap mt-1 pt-1 border-t border-muted-foreground/15">
+            <pre className="text-[11px] text-muted-foreground/60 max-h-32 overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words mt-1 pt-1 border-t border-muted-foreground/15">
               {toolCall.result}
             </pre>
           )}
@@ -380,23 +381,23 @@ function MessageBubble({
   if (message.role === "user") {
     return (
       <div className="flex justify-end mb-4">
-        <div className="max-w-[80%]">
+        <div className="max-w-[80%] min-w-0">
           {message.attachments && message.attachments.length > 0 && (
             <div className="flex gap-1.5 mb-1.5 justify-end flex-wrap">
               {message.attachments.map((att, i) =>
                 att.isImage ? (
                   <img key={i} src={`/api/chats/file/${att.filename}`} alt={att.name} className="max-h-40 rounded-lg border border-white/20" />
                 ) : (
-                  <div key={i} className="flex items-center gap-1.5 rounded-lg bg-blue-700 px-2.5 py-1.5 text-xs text-white/80">
-                    <Paperclip className="h-3 w-3" />
-                    {att.name}
+                  <div key={i} className="flex items-center gap-1.5 rounded-lg bg-blue-700 px-2.5 py-1.5 text-xs text-white/80 max-w-full overflow-hidden">
+                    <Paperclip className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{att.name}</span>
                   </div>
                 ),
               )}
             </div>
           )}
-          <div className="rounded-2xl rounded-br-md bg-blue-600 text-white px-4 py-2.5 text-sm shadow-sm">
-            <p className="whitespace-pre-wrap">{message.content}</p>
+          <div className="rounded-2xl rounded-br-md bg-blue-600 text-white px-4 py-2.5 text-sm shadow-sm overflow-hidden">
+            <p className="whitespace-pre-wrap break-words" style={{ overflowWrap: "anywhere" }}>{message.content}</p>
           </div>
           {timestamp && (
             <div className="text-[10px] text-muted-foreground/40 text-right mt-1 mr-1">{timestamp}</div>
@@ -407,7 +408,7 @@ function MessageBubble({
   }
 
   return (
-    <div className="mb-4">
+    <div className="mb-4 min-w-0 overflow-hidden">
       <div className="flex items-center gap-2 mb-1.5">
         <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center">
           <AgentIcon icon={agentIcon} className="h-3 w-3 text-muted-foreground" />
@@ -429,7 +430,7 @@ function MessageBubble({
       )}
 
       {message.content ? (
-        <div className="text-sm">
+        <div className="text-sm overflow-hidden break-words">
           <MarkdownBody>{message.content}</MarkdownBody>
         </div>
       ) : message.streaming ? (
@@ -462,6 +463,7 @@ export function ChatView({
     runId,
     initialMessages,
   );
+  const { keyboardOpen } = useVisualViewport();
   const [inputValue, setInputValue] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -544,11 +546,11 @@ export function ChatView({
     ("webkitSpeechRecognition" in window || "SpeechRecognition" in window);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Messages area */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto px-4 py-4"
+        className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4"
       >
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
@@ -598,7 +600,7 @@ export function ChatView({
       )}
 
       {/* Input bar */}
-      <div className="border-t border-border p-3 bg-background" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
+      <div className="border-t border-border p-3 bg-background shrink-0" style={{ paddingBottom: keyboardOpen ? "0.75rem" : "max(0.75rem, env(safe-area-inset-bottom))" }}>
         <div className="flex items-center gap-2">
           {/* Attachment button */}
           <input
@@ -630,10 +632,10 @@ export function ChatView({
             placeholder="Type a message... (Cmd+Enter to send)"
             rows={1}
             className={cn(
-              "flex-1 min-w-0 resize-none overflow-hidden rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm",
+              "flex-1 min-w-0 resize-none rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm",
               "placeholder:text-muted-foreground/50",
               "focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent",
-              "max-h-40 scrollbar-thin",
+              "max-h-40 overflow-y-auto scrollbar-thin",
             )}
           />
 
