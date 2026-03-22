@@ -16,6 +16,7 @@ import { ToastViewport } from "./ToastViewport";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { WorktreeBanner } from "./WorktreeBanner";
 import { HotRestartBanner } from "./HotRestartBanner";
+import { ChatPanel } from "./ChatPanel";
 import { useDialog } from "../context/DialogContext";
 import { usePanel } from "../context/PanelContext";
 import { useCompany } from "../context/CompanyContext";
@@ -430,6 +431,7 @@ export function Layout() {
       <NewGoalDialog />
       <NewAgentDialog />
       <ToastViewport />
+      <ChatPanel />
     </div>
   );
 }

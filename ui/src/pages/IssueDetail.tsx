@@ -9,6 +9,7 @@ import { authApi } from "../api/auth";
 import { projectsApi } from "../api/projects";
 import { useCompany } from "../context/CompanyContext";
 import { usePanel } from "../context/PanelContext";
+import { useChat } from "../context/ChatContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { readIssueDetailBreadcrumb } from "../lib/issueDetailBreadcrumb";
@@ -192,6 +193,7 @@ export function IssueDetail() {
   const { issueId } = useParams<{ issueId: string }>();
   const { selectedCompanyId } = useCompany();
   const { openPanel, closePanel, panelVisible, setPanelVisible } = usePanel();
+  const { openRunChat } = useChat();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -693,13 +695,37 @@ export function IssueDetail() {
           <span className="text-sm font-mono text-muted-foreground shrink-0">{issue.identifier ?? issue.id.slice(0, 8)}</span>
 
           {hasLiveRuns && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 px-2 py-0.5 text-[10px] font-medium text-cyan-600 dark:text-cyan-400 shrink-0">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cyan-400" />
+            <>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 px-2 py-0.5 text-[10px] font-medium text-cyan-600 dark:text-cyan-400 shrink-0">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cyan-400" />
+                </span>
+                Live
               </span>
-              Live
-            </span>
+              {(() => {
+                const liveRun = (liveRuns ?? [])[0] ?? activeRun;
+                if (!liveRun) return null;
+                const agent = (agents ?? []).find((a: Agent) => a.id === liveRun.agentId);
+                if (!agent) return null;
+                return (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void openRunChat(
+                        liveRun.id,
+                        { id: agent.id, name: agent.name, icon: agent.icon },
+                        issue?.title,
+                      )
+                    }
+                    className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 border border-blue-500/30 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 transition-colors shrink-0"
+                  >
+                    <MessageSquare className="h-2.5 w-2.5" />
+                    Join
+                  </button>
+                );
+              })()}
+            </>
           )}
 
           {issue.projectId ? (

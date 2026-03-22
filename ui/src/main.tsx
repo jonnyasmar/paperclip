@@ -11,6 +11,7 @@ import { BreadcrumbProvider } from "./context/BreadcrumbContext";
 import { PanelProvider } from "./context/PanelContext";
 import { SidebarProvider } from "./context/SidebarContext";
 import { DialogProvider } from "./context/DialogContext";
+import { ChatProvider } from "./context/ChatContext";
 import { ToastProvider } from "./context/ToastContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -52,7 +53,9 @@ createRoot(document.getElementById("root")!).render(
                       <PanelProvider>
                         <PluginLauncherProvider>
                           <DialogProvider>
-                            <App />
+                            <ChatProvider>
+                              <App />
+                            </ChatProvider>
                           </DialogProvider>
                         </PluginLauncherProvider>
                       </PanelProvider>

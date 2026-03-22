@@ -12,6 +12,7 @@ import { usePanel } from "../context/PanelContext";
 import { useSidebar } from "../context/SidebarContext";
 import { useCompany } from "../context/CompanyContext";
 import { useDialog } from "../context/DialogContext";
+import { useChat } from "../context/ChatContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { AgentConfigForm } from "../components/AgentConfigForm";
@@ -56,6 +57,7 @@ import {
   ChevronRight,
   ChevronDown,
   ArrowLeft,
+  MessageCircle,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { AgentIcon, AgentIconPicker } from "../components/AgentIconPicker";
@@ -248,6 +250,7 @@ export function AgentDetail() {
   const { companies, selectedCompanyId, setSelectedCompanyId } = useCompany();
   const { closePanel } = usePanel();
   const { openNewIssue } = useDialog();
+  const { openChat } = useChat();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -538,6 +541,14 @@ export function AgentDetail() {
           </div>
         </div>
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void openChat({ id: agent.id, name: agent.name, icon: agent.icon })}
+          >
+            <MessageCircle className="h-3.5 w-3.5 sm:mr-1" />
+            <span className="hidden sm:inline">Chat</span>
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -1341,6 +1352,7 @@ function RunsTab({
 function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: HeartbeatRun; agentRouteId: string; adapterType: string }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { openRunChat } = useChat();
   const { data: hydratedRun } = useQuery({
     queryKey: queryKeys.runDetail(initialRun.id),
     queryFn: () => heartbeatsApi.get(initialRun.id),
@@ -1497,15 +1509,31 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: Heartb
             <div className="flex items-center gap-2">
               <StatusBadge status={run.status} />
               {(run.status === "running" || run.status === "queued") && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-destructive hover:text-destructive text-xs h-6 px-2"
-                  onClick={() => cancelRun.mutate()}
-                  disabled={cancelRun.isPending}
-                >
-                  {cancelRun.isPending ? "Cancelling…" : "Cancel"}
-                </Button>
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs h-6 px-2"
+                    onClick={() =>
+                      void openRunChat(
+                        run.id,
+                        { id: run.agentId, name: agentRouteId },
+                      )
+                    }
+                  >
+                    <MessageCircle className="h-3.5 w-3.5 mr-1" />
+                    Join
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive text-xs h-6 px-2"
+                    onClick={() => cancelRun.mutate()}
+                    disabled={cancelRun.isPending}
+                  >
+                    {cancelRun.isPending ? "Cancelling…" : "Cancel"}
+                  </Button>
+                </>
               )}
               {canResumeLostRun && (
                 <Button

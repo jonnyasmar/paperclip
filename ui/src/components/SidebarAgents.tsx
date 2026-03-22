@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
 import { NavLink, useLocation } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Plus } from "lucide-react";
+import { ChevronRight, MessageCircle, Plus } from "lucide-react";
 import { useCompany } from "../context/CompanyContext";
 import { useDialog } from "../context/DialogContext";
+import { useChat } from "../context/ChatContext";
 import { useSidebar } from "../context/SidebarContext";
 import { agentsApi } from "../api/agents";
 import { heartbeatsApi } from "../api/heartbeats";
@@ -56,6 +57,7 @@ function AgentRow({
   allAgents,
   collapsedSet,
   toggleExpanded,
+  onChatClick,
 }: {
   agent: Agent;
   depth: number;
@@ -67,6 +69,7 @@ function AgentRow({
   allAgents: Map<string, Agent>;
   collapsedSet: Set<string>;
   toggleExpanded: (id: string) => void;
+  onChatClick: (agent: Agent) => void;
 }) {
   const children = childrenOf.get(agent.id) ?? [];
   const hasChildren = children.length > 0;
@@ -140,6 +143,20 @@ function AgentRow({
               </span>
             )}
           </span>
+
+          {/* Chat button — visible on hover */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onChatClick(agent);
+            }}
+            className="opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0 flex items-center justify-center h-5 w-5 rounded text-muted-foreground/50 hover:text-foreground hover:bg-accent/50"
+            title={`Chat with ${agent.name}`}
+          >
+            <MessageCircle className="h-3 w-3" />
+          </button>
 
           {/* Own live runs indicator */}
           {(agent.pauseReason === "budget" || runCount > 0) && (
@@ -226,6 +243,7 @@ function AgentRow({
             allAgents={allAgents}
             collapsedSet={collapsedSet}
             toggleExpanded={toggleExpanded}
+            onChatClick={onChatClick}
           />
         ))
       }
@@ -239,8 +257,17 @@ export function SidebarAgents() {
   const [collapsedSet, setCollapsedSet] = useState<Set<string>>(new Set());
   const { selectedCompanyId } = useCompany();
   const { openNewAgent } = useDialog();
+  const { openChat } = useChat();
   const { isMobile, setSidebarOpen } = useSidebar();
   const location = useLocation();
+
+  const handleChatClick = useCallback(
+    (agent: Agent) => {
+      void openChat({ id: agent.id, name: agent.name, icon: agent.icon });
+      if (isMobile) setSidebarOpen(false);
+    },
+    [openChat, isMobile, setSidebarOpen],
+  );
 
   const toggleExpanded = useCallback((id: string) => {
     setCollapsedSet((prev) => {
@@ -342,6 +369,7 @@ export function SidebarAgents() {
               allAgents={byId}
               collapsedSet={collapsedSet}
               toggleExpanded={toggleExpanded}
+              onChatClick={handleChatClick}
             />
           ))}
         </div>

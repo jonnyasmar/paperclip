@@ -25,6 +25,7 @@ import { llmRoutes } from "./routes/llms.js";
 import { assetRoutes } from "./routes/assets.js";
 import { accessRoutes } from "./routes/access.js";
 import { systemRoutes } from "./routes/system.js";
+import { chatRoutes } from "./routes/chat.js";
 import { pluginRoutes } from "./routes/plugins.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { applyUiBranding } from "./ui-branding.js";
@@ -212,6 +213,7 @@ export async function createApp(
       allowedHostnames: opts.allowedHostnames,
     }),
   );
+  api.use(chatRoutes(db));
   if (opts.hotRestart) {
     api.use(systemRoutes(opts.hotRestart));
   }
