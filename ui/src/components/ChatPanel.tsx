@@ -333,24 +333,14 @@ export function ChatPanel() {
                   <LogOut className="h-3 w-3" />
                   Exit &amp; Resume
                 </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    "shrink-0 text-xs text-muted-foreground gap-1.5",
-                  )}
-                  onClick={handleBackToList}
-                >
-                  Close
-                </Button>
-              )}
+              ) : null}
 
               <Button
                 variant="ghost"
                 size="icon-sm"
-                className="text-muted-foreground shrink-0"
+                className="text-muted-foreground shrink-0 ml-auto"
                 onClick={handleClose}
+                title="Close panel"
               >
                 <X className="h-4 w-4" />
               </Button>

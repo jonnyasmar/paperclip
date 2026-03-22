@@ -28,6 +28,7 @@ import {
 interface ChatSession {
   chatId: string;
   agentId: string;
+  companyId?: string;
   agentName: string;
   agentIcon: string | null;
   runId?: string;
@@ -107,15 +108,24 @@ function spawnChatMessage(
     args.push("--model", model);
   }
 
-  // Build env (inherit process env, add PATH)
+  // Build env (inherit process env, add agent's configured env vars)
   const envConfig = parseObject(agentConfig.env);
   const envOverrides: Record<string, string> = {};
   for (const [key, value] of Object.entries(envConfig)) {
-    if (typeof value === "string") envOverrides[key] = value;
+    if (typeof value === "string") {
+      envOverrides[key] = value;
+    } else if (typeof value === "object" && value !== null && "value" in (value as Record<string, unknown>)) {
+      // Handle {"type": "plain", "value": "..."} format
+      const v = (value as Record<string, unknown>).value;
+      if (typeof v === "string") envOverrides[key] = v;
+    }
   }
   const env = ensurePathInEnv({
     ...process.env,
     ...envOverrides,
+    PAPERCLIP_AGENT_ID: session.agentId,
+    PAPERCLIP_COMPANY_ID: session.companyId ?? "",
+    PAPERCLIP_API_URL: process.env.PAPERCLIP_API_URL ?? `http://127.0.0.1:${process.env.PORT ?? "3100"}`,
   }) as Record<string, string>;
 
   // Persist user message
@@ -387,6 +397,7 @@ export function chatRoutes(db: Db) {
     const session: ChatSession = {
       chatId,
       agentId: agent.id,
+      companyId: agent.companyId,
       agentName: agent.name,
       agentIcon: (agent.icon as string) ?? null,
       sessionId: null,

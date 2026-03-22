@@ -338,50 +338,59 @@ function MessageBubble({
   agentName: string;
   agentIcon?: string | null;
 }) {
+  const timestamp = message.timestamp
+    ? new Date(message.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : "";
+
   if (message.role === "user") {
     return (
-      <div className="flex justify-end mb-3">
-        <div className="max-w-[80%] rounded-2xl rounded-br-md bg-blue-600 text-white px-4 py-2.5 text-sm shadow-sm">
-          <p className="whitespace-pre-wrap">{message.content}</p>
+      <div className="flex justify-end mb-4">
+        <div className="max-w-[80%]">
+          <div className="rounded-2xl rounded-br-md bg-blue-600 text-white px-4 py-2.5 text-sm shadow-sm">
+            <p className="whitespace-pre-wrap">{message.content}</p>
+          </div>
+          {timestamp && (
+            <div className="text-[10px] text-muted-foreground/40 text-right mt-1 mr-1">{timestamp}</div>
+          )}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex gap-2.5 mb-3">
-      <div className="shrink-0 mt-1">
-        <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center">
-          <AgentIcon icon={agentIcon} className="h-4 w-4 text-muted-foreground" />
+    <div className="mb-4">
+      <div className="flex items-center gap-2 mb-1.5">
+        <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center">
+          <AgentIcon icon={agentIcon} className="h-3 w-3 text-muted-foreground" />
         </div>
+        <span className="text-xs font-medium text-muted-foreground">{agentName}</span>
+        {timestamp && (
+          <span className="text-[10px] text-muted-foreground/40">{timestamp}</span>
+        )}
       </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-xs font-medium text-muted-foreground mb-1">
-          {agentName}
+
+      {message.thinking && <ThinkingBlock text={message.thinking} streaming={message.streaming} />}
+
+      {message.toolCalls && message.toolCalls.length > 0 && (
+        <div className="space-y-1.5 mb-2">
+          {message.toolCalls.map((tc, i) => (
+            <ToolCallBlock key={i} toolCall={tc} />
+          ))}
         </div>
+      )}
 
-        {message.thinking && <ThinkingBlock text={message.thinking} streaming={message.streaming} />}
-
-        {message.toolCalls?.map((tc, i) => (
-          <ToolCallBlock key={i} toolCall={tc} />
-        ))}
-
-        {message.content ? (
-          <div className="rounded-2xl rounded-tl-md bg-card border border-border px-4 py-2.5 shadow-sm">
-            <MarkdownBody className="text-sm">{message.content}</MarkdownBody>
-          </div>
-        ) : message.streaming ? (
-          <div className="rounded-2xl rounded-tl-md bg-card border border-border px-4 py-2.5 shadow-sm">
-            <span className="inline-flex gap-1 items-center text-sm text-muted-foreground">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
-              </span>
-              Thinking...
-            </span>
-          </div>
-        ) : null}
-      </div>
+      {message.content ? (
+        <div className="text-sm">
+          <MarkdownBody>{message.content}</MarkdownBody>
+        </div>
+      ) : message.streaming ? (
+        <span className="inline-flex gap-1 items-center text-sm text-muted-foreground">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
+          </span>
+        </span>
+      ) : null}
     </div>
   );
 }
