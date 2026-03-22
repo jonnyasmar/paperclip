@@ -19,12 +19,82 @@ import { ActivityRow } from "../components/ActivityRow";
 import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { cn, formatCents } from "../lib/utils";
-import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard, PauseCircle } from "lucide-react";
+import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard, PauseCircle, MessageCircle, Plus } from "lucide-react";
+import { useChat, type ChatSummary } from "../context/ChatContext";
+import { AgentIcon } from "../components/AgentIconPicker";
+import { api } from "../api/client";
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
 import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
 import { PageSkeleton } from "../components/PageSkeleton";
 import type { Agent, Issue } from "@paperclipai/shared";
 import { PluginSlotOutlet } from "@/plugins/slots";
+
+function QuickChatBar({ companyId }: { companyId: string }) {
+  const { openChat, openChatPanel } = useChat();
+
+  const { data: chats } = useQuery({
+    queryKey: ["chats"],
+    queryFn: () => api.get<ChatSummary[]>("/chats"),
+    staleTime: 30_000,
+  });
+
+  const { data: agents } = useQuery({
+    queryKey: queryKeys.agents.list(companyId),
+    queryFn: () => agentsApi.list(companyId),
+    enabled: !!companyId,
+  });
+
+  // Build top agents: most chatted with, deduplicated
+  const topAgents = useMemo(() => {
+    if (!chats || !agents) return [];
+    const agentMap = new Map(agents.filter((a) => a.status !== "terminated").map((a) => [a.id, a]));
+
+    // Count chats per agent
+    const counts = new Map<string, number>();
+    for (const chat of chats) {
+      counts.set(chat.agentId, (counts.get(chat.agentId) ?? 0) + 1);
+    }
+
+    // Sort by chat count, take top 6
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([agentId]) => agentMap.get(agentId))
+      .filter(Boolean) as Agent[];
+  }, [chats, agents]);
+
+  // If no chat history, show first 6 agents
+  const displayAgents = topAgents.length > 0 ? topAgents : (agents ?? []).filter((a) => a.status !== "terminated").slice(0, 6);
+
+  if (displayAgents.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-2 overflow-x-auto pb-1">
+      <span className="text-xs text-muted-foreground/60 font-medium shrink-0">Chat</span>
+      {displayAgents.map((agent) => (
+        <button
+          key={agent.id}
+          type="button"
+          onClick={() => openChat({ id: agent.id, name: agent.name, icon: agent.icon }).catch(() => {})}
+          className="flex items-center gap-1.5 rounded-full border border-border bg-card hover:bg-accent/50 px-3 py-1.5 text-xs font-medium transition-colors shrink-0"
+          title={`Chat with ${agent.name}`}
+        >
+          <AgentIcon icon={agent.icon} className="h-3.5 w-3.5 text-muted-foreground" />
+          {agent.name}
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={openChatPanel}
+        className="flex items-center gap-1 rounded-full border border-dashed border-border hover:bg-accent/50 px-3 py-1.5 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors shrink-0"
+        title="All agents"
+      >
+        <Plus className="h-3 w-3" />
+        More
+      </button>
+    </div>
+  );
+}
 
 function getRecentIssues(issues: Issue[]): Issue[] {
   return [...issues]
@@ -205,6 +275,8 @@ export function Dashboard() {
           </button>
         </div>
       )}
+
+      <QuickChatBar companyId={selectedCompanyId!} />
 
       <ActiveAgentsPanel companyId={selectedCompanyId!} />
 
