@@ -498,32 +498,28 @@ export function ProjectDetail() {
           />
         </div>
         <div className="min-w-0 space-y-2">
-          <InlineEditor
-            value={project.name}
-            onSave={(name) => updateProject.mutate({ name })}
-            as="h2"
-            className="text-xl font-bold"
-          />
+          <div className="flex items-baseline gap-3">
+            <InlineEditor
+              value={project.name}
+              onSave={(name) => updateProject.mutate({ name })}
+              as="h2"
+              className="text-xl font-bold"
+            />
+            {projectCost && (projectCost.inputTokens + projectCost.outputTokens) > 0 && (
+              <span
+                className="text-xs text-muted-foreground/60 font-mono tabular-nums shrink-0"
+                title={`${(projectCost.inputTokens + projectCost.outputTokens).toLocaleString()} tokens (${projectCost.inputTokens.toLocaleString()} in / ${projectCost.cachedInputTokens.toLocaleString()} cached / ${projectCost.outputTokens.toLocaleString()} out)${projectCost.costCents > 0 ? ` — $${(projectCost.costCents / 100).toFixed(2)}` : ""}`}
+              >
+                {formatTokenCount(projectCost.inputTokens + projectCost.outputTokens)} tok{projectCost.costCents > 0 ? ` · $${(projectCost.costCents / 100).toFixed(2)}` : ""}
+              </span>
+            )}
+          </div>
           {project.pauseReason === "budget" ? (
             <div className="inline-flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-red-200">
               <span className="h-2 w-2 rounded-full bg-red-400" />
               Paused by budget hard stop
             </div>
           ) : null}
-          {projectCost && (projectCost.inputTokens + projectCost.outputTokens) > 0 && (
-            <div
-              className="inline-flex items-center gap-2 text-xs text-muted-foreground font-mono tabular-nums"
-              title={`${(projectCost.inputTokens + projectCost.outputTokens).toLocaleString()} tokens (${projectCost.inputTokens.toLocaleString()} in / ${projectCost.cachedInputTokens.toLocaleString()} cached / ${projectCost.outputTokens.toLocaleString()} out)${projectCost.costCents > 0 ? ` — $${(projectCost.costCents / 100).toFixed(2)}` : ""}`}
-            >
-              <span>{formatTokenCount(projectCost.inputTokens + projectCost.outputTokens)} tokens</span>
-              {projectCost.costCents > 0 && (
-                <>
-                  <span className="text-muted-foreground/40">·</span>
-                  <span>${(projectCost.costCents / 100).toFixed(2)}</span>
-                </>
-              )}
-            </div>
-          )}
         </div>
       </div>
 

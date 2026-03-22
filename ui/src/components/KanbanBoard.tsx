@@ -20,6 +20,7 @@ import {
 import { StatusIcon } from "./StatusIcon";
 import { PriorityIcon } from "./PriorityIcon";
 import { Identity } from "./Identity";
+import { timeAgo } from "../lib/timeAgo";
 import type { Issue, CostByIssue } from "@paperclipai/shared";
 
 const boardStatuses = [
@@ -179,7 +180,8 @@ function KanbanCard({
             </span>
           )}
         </div>
-        <p className="text-sm leading-snug line-clamp-2 mb-2">{issue.title}</p>
+        <p className="text-sm leading-snug line-clamp-2 mb-1.5">{issue.title}</p>
+        <p className="text-[10px] text-muted-foreground/50 mb-1.5">{timeAgo(issue.updatedAt)}</p>
         <div className="flex items-center gap-2">
           <PriorityIcon priority={issue.priority} />
           {issue.assigneeAgentId && (() => {

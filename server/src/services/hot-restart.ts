@@ -1,15 +1,19 @@
+export interface InterruptedRun {
+  agentId: string;
+  issueId: string | null;
+  contextSnapshot: Record<string, unknown>;
+}
+
 export interface HotRestartState {
   pending: boolean;
   activeRunCount: number;
-  pausedAgentIds: string[];
   requestedAt: Date | null;
 }
 
 export function hotRestartService(deps: {
-    getActiveRunCount: () => Promise<number>;
-    pauseAllAgents: (companyId: string) => Promise<string[]>;
-    resumeAllAgents: (agentIds: string[]) => Promise<void>;
+    getActiveRuns: () => Promise<InterruptedRun[]>;
     cancelActiveRuns: (companyId: string) => Promise<void>;
+    requeueRun: (agentId: string, contextSnapshot: Record<string, unknown>) => Promise<void>;
     publishGlobalEvent: (event: {
       type: string;
       payload: Record<string, unknown>;
@@ -20,101 +24,69 @@ export function hotRestartService(deps: {
   let state: HotRestartState = {
     pending: false,
     activeRunCount: 0,
-    pausedAgentIds: [],
     requestedAt: null,
   };
-  let drainInterval: NodeJS.Timeout | null = null;
 
   return {
     getState: () => ({ ...state }),
 
+    // Always restarts immediately — kills active runs and re-queues them after restart
     requestRestart: async (companyId: string) => {
       if (state.pending) return state;
 
       state.pending = true;
       state.requestedAt = new Date();
 
-      state.activeRunCount = await deps.getActiveRunCount();
+      const activeRuns = await deps.getActiveRuns();
+      state.activeRunCount = activeRuns.length;
 
-      if (state.activeRunCount === 0) {
-        deps.publishGlobalEvent({
-          type: "system.restarting",
-          payload: { immediate: true },
-        });
-        await writeResumeFile([]);
-        setTimeout(() => deps.shutdown(), 500);
-        return state;
+      if (activeRuns.length > 0) {
+        await deps.cancelActiveRuns(companyId);
       }
-
-      state.pausedAgentIds = await deps.pauseAllAgents(companyId);
-
-      deps.publishGlobalEvent({
-        type: "system.restart_pending",
-        payload: {
-          activeRunCount: state.activeRunCount,
-          pausedAgentIds: state.pausedAgentIds,
-        },
-      });
-
-      drainInterval = setInterval(async () => {
-        state.activeRunCount = await deps.getActiveRunCount();
-        if (state.activeRunCount === 0) {
-          if (drainInterval) clearInterval(drainInterval);
-          deps.publishGlobalEvent({
-            type: "system.restarting",
-            payload: { immediate: false, drained: true },
-          });
-          await writeResumeFile(state.pausedAgentIds);
-          setTimeout(() => deps.shutdown(), 500);
-        }
-      }, 5000);
-
-      return state;
-    },
-
-    forceRestart: async (companyId: string) => {
-      if (drainInterval) clearInterval(drainInterval);
-
-      await deps.cancelActiveRuns(companyId);
 
       deps.publishGlobalEvent({
         type: "system.restarting",
-        payload: { immediate: true, forced: true },
+        payload: { interruptedRuns: activeRuns.length },
       });
-      await writeResumeFile(state.pausedAgentIds);
+      await writeResumeFile(activeRuns);
       setTimeout(() => deps.shutdown(), 1000);
+      return state;
     },
 
+    // On startup, re-queue any runs that were interrupted by the previous restart
     handleStartupResume: async () => {
       const resumeData = await readResumeFile();
       if (!resumeData || resumeData.length === 0) return;
 
-      await deps.resumeAllAgents(resumeData);
+      for (const run of resumeData) {
+        try {
+          await deps.requeueRun(run.agentId, {
+            ...run.contextSnapshot,
+            wakeReason: "hot_restart_resume",
+          });
+        } catch {
+          // Agent may have been terminated or task completed
+        }
+      }
+
       await clearResumeFile();
     },
   };
 }
 
-async function writeResumeFile(pausedAgentIds: string[]) {
+async function writeResumeFile(interruptedRuns: InterruptedRun[]) {
   const fs = await import("node:fs/promises");
   const path = await import("node:path");
   const filePath = path.join(process.cwd(), ".hot-restart-resume.json");
-  await fs.writeFile(
-    filePath,
-    JSON.stringify({
-      pausedAgentIds,
-      timestamp: new Date().toISOString(),
-    }),
-  );
+  await fs.writeFile(filePath, JSON.stringify(interruptedRuns));
 }
 
-async function readResumeFile(): Promise<string[] | null> {
+async function readResumeFile(): Promise<InterruptedRun[] | null> {
   const fs = await import("node:fs/promises");
   const path = await import("node:path");
   const filePath = path.join(process.cwd(), ".hot-restart-resume.json");
   try {
-    const data = JSON.parse(await fs.readFile(filePath, "utf-8"));
-    return data.pausedAgentIds ?? null;
+    return JSON.parse(await fs.readFile(filePath, "utf-8"));
   } catch {
     return null;
   }

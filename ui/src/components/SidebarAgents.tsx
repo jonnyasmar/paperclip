@@ -281,6 +281,12 @@ export function SidebarAgents() {
     return { roots, childrenOf: tree.childrenOf, byId: tree.byId };
   }, [agents]);
 
+  const totalLiveRuns = useMemo(() => {
+    let total = 0;
+    for (const count of liveCountByAgent.values()) total += count;
+    return total;
+  }, [liveCountByAgent]);
+
   const agentMatch = location.pathname.match(/^\/(?:[^/]+\/)?agents\/([^/]+)/);
   const activeAgentId = agentMatch?.[1] ?? null;
 
@@ -296,9 +302,18 @@ export function SidebarAgents() {
               )}
             />
             <span className="text-[10px] font-medium uppercase tracking-widest font-mono text-muted-foreground/60">
-              Agents
+              Agents{byId.size > 0 ? ` (${byId.size})` : ""}
             </span>
           </CollapsibleTrigger>
+          {totalLiveRuns > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-1.5 py-0.5">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-blue-500" />
+              </span>
+              <span className="text-[10px] font-medium text-blue-500 tabular-nums">{totalLiveRuns}</span>
+            </span>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation();

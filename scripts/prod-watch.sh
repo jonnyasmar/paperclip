@@ -32,7 +32,7 @@ SIDECAR_PIDS=()
 
 cleanup() {
   echo "[prod-watch] Shutting down..."
-  for pid in "${SIDECAR_PIDS[@]}"; do
+  for pid in "${SIDECAR_PIDS[@]+"${SIDECAR_PIDS[@]}"}"; do
     kill "$pid" 2>/dev/null || true
   done
   if [[ -n "$SERVER_PID" ]]; then
@@ -45,8 +45,13 @@ trap cleanup SIGINT SIGTERM EXIT
 
 build() {
   echo "[prod-watch] Building..."
-  pnpm build
-  echo "[prod-watch] Build complete."
+  if pnpm build; then
+    echo "[prod-watch] Build complete."
+    return 0
+  else
+    echo "[prod-watch] Build FAILED — waiting for next change to retry."
+    return 1
+  fi
 }
 
 start_server() {
@@ -139,11 +144,30 @@ watch_for_changes() {
   fi
 }
 
+# Check if source files are newer than the build output
+sources_changed_since_build() {
+  local build_marker="$ROOT_DIR/server/dist/index.js"
+  [[ ! -f "$build_marker" ]] && return 0
+  local newer
+  newer=$(find "${WATCH_DIRS[@]}" \
+    -not -path "*/node_modules/*" \
+    -not -path "*/dist/*" \
+    -not -path "*/.git/*" \
+    -not -name "*.map" \
+    -type f \
+    -newer "$build_marker" \
+    2>/dev/null | head -1)
+  [[ -n "$newer" ]]
+}
+
 # --- Main loop ---
 
-build
-start_server
-start_sidecars
+if ! build; then
+  echo "[prod-watch] Initial build failed. Watching for changes to retry..."
+else
+  start_server
+  start_sidecars
+fi
 
 echo "[prod-watch] Watching for changes..."
 
@@ -152,13 +176,32 @@ while true; do
 
   echo ""
   echo "[prod-watch] Change detected."
-  notify_restart
-  wait_for_server_exit
-  stop_sidecars
 
-  build
-  start_server
-  start_sidecars
+  # Only notify/stop if server is running
+  if [[ -n "$SERVER_PID" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
+    notify_restart
+    wait_for_server_exit
+    stop_sidecars
+  fi
+
+  if ! build; then
+    echo "[prod-watch] Watching for changes to retry..."
+    continue
+  fi
+
+  # Rebuild if more changes arrived during the build
+  while sources_changed_since_build; do
+    echo "[prod-watch] Additional changes detected during build, rebuilding..."
+    if ! build; then
+      break
+    fi
+  done
+
+  # Only start if build succeeded
+  if [[ -f "$ROOT_DIR/server/dist/index.js" ]]; then
+    start_server
+    start_sidecars
+  fi
 
   echo "[prod-watch] Watching for changes..."
 done

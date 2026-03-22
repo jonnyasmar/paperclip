@@ -466,39 +466,30 @@ export async function startServer(): Promise<StartedServer> {
   const storageService = createStorageServiceFromConfig(config);
 
   const hotRestartSvc = hotRestartService({
-    getActiveRunCount: async () => {
+    getActiveRuns: async () => {
       const { heartbeatRuns: hbRuns } = await import("@paperclipai/db");
-      const { inArray } = await import("drizzle-orm");
+      const { inArray: inArr2 } = await import("drizzle-orm");
       const rows = await (db as any)
-        .select({ id: hbRuns.id })
+        .select({
+          agentId: hbRuns.agentId,
+          contextSnapshot: hbRuns.contextSnapshot,
+        })
         .from(hbRuns)
-        .where(inArray(hbRuns.status, ["queued", "running"]));
-      return rows.length;
+        .where(inArr2(hbRuns.status, ["queued", "running"]));
+      return rows.map((r: any) => ({
+        agentId: r.agentId,
+        issueId: r.contextSnapshot?.issueId ?? null,
+        contextSnapshot: r.contextSnapshot ?? {},
+      }));
     },
-    pauseAllAgents: async (companyId: string) => {
-      const svc = agentService(db as any);
-      const allAgents = await svc.list(companyId);
-      const pausedIds: string[] = [];
-      for (const agent of allAgents) {
-        if (agent.status === "paused" || agent.status === "terminated" || agent.status === "pending_approval") continue;
-        try {
-          await svc.pause(agent.id, "system");
-          pausedIds.push(agent.id);
-        } catch {
-          // Agent may already be in an incompatible state
-        }
-      }
-      return pausedIds;
-    },
-    resumeAllAgents: async (agentIds: string[]) => {
-      const svc = agentService(db as any);
-      for (const id of agentIds) {
-        try {
-          await svc.resume(id);
-        } catch {
-          // Agent may have been deleted or terminated
-        }
-      }
+    requeueRun: async (agentId: string, contextSnapshot: Record<string, unknown>) => {
+      const heartbeat = heartbeatService(db as any);
+      await heartbeat.wakeup(agentId, {
+        source: "on_demand",
+        triggerDetail: "system",
+        reason: "hot_restart_resume",
+        contextSnapshot,
+      });
     },
     cancelActiveRuns: async (companyId: string) => {
       const { heartbeatRuns: hbRuns } = await import("@paperclipai/db");
