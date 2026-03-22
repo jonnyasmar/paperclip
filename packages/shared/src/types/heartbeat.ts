@@ -120,6 +120,7 @@ export interface InstanceSchedulerHeartbeatAgent {
   status: AgentStatus;
   adapterType: string;
   intervalSec: number;
+  cronSchedules: string[];
   heartbeatEnabled: boolean;
   schedulerActive: boolean;
   lastHeartbeatAt: Date | null;

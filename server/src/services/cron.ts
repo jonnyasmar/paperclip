@@ -334,6 +334,65 @@ export function nextCronTickFromExpression(
   return nextCronTick(cron, after);
 }
 
+/**
+ * Calculate the most recent time the cron schedule would have fired at or
+ * before `before`.
+ *
+ * Walks backward from `before` minute-by-minute until a matching slot is
+ * found, up to a 4-year window.
+ *
+ * @param cron   — Parsed cron schedule.
+ * @param before — The reference date. The returned date will be at or before this.
+ * @returns The most recent matching `Date`, or `null` if no match within the search window.
+ */
+export function previousCronTick(cron: ParsedCron, before: Date): Date | null {
+  const d = new Date(before.getTime());
+  // Snap to current minute (floor)
+  d.setUTCSeconds(0, 0);
+
+  const MAX_CRON_SEARCH_YEARS = 4;
+  const maxIterations = MAX_CRON_SEARCH_YEARS * 366 * 24 * 60;
+
+  for (let i = 0; i < maxIterations; i++) {
+    const month = d.getUTCMonth() + 1;
+    const dayOfMonth = d.getUTCDate();
+    const dayOfWeek = d.getUTCDay();
+    const hour = d.getUTCHours();
+    const minute = d.getUTCMinutes();
+
+    if (
+      cron.months.includes(month) &&
+      cron.daysOfMonth.includes(dayOfMonth) &&
+      cron.daysOfWeek.includes(dayOfWeek) &&
+      cron.hours.includes(hour) &&
+      cron.minutes.includes(minute)
+    ) {
+      return new Date(d.getTime());
+    }
+
+    // Step back one minute
+    d.setUTCMinutes(d.getUTCMinutes() - 1);
+  }
+
+  return null;
+}
+
+/**
+ * Convenience: parse a cron expression and compute the previous run time.
+ *
+ * @param expression — 5-field cron expression string.
+ * @param before — Reference date (defaults to `new Date()`).
+ * @returns The most recent matching Date, or `null` if no match within 4 years.
+ * @throws {Error} if the cron expression is invalid.
+ */
+export function previousCronTickFromExpression(
+  expression: string,
+  before: Date = new Date(),
+): Date | null {
+  const cron = parseCron(expression);
+  return previousCronTick(cron, before);
+}
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------

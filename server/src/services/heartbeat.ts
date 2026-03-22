@@ -27,6 +27,7 @@ import { budgetService, type BudgetEnforcementScope } from "./budgets.js";
 import { secretService } from "./secrets.js";
 import { resolveDefaultAgentWorkspaceDir } from "../home-paths.js";
 import { summarizeHeartbeatRunResultJson } from "./heartbeat-run-summary.js";
+import { parseCron, previousCronTick } from "./cron.js";
 import {
   buildWorkspaceReadyComment,
   ensureRuntimeServicesForRun,
@@ -57,6 +58,27 @@ const SESSIONED_LOCAL_ADAPTERS = new Set([
   "opencode_local",
   "pi_local",
 ]);
+
+/**
+ * Check whether any of the given cron expressions would have fired between
+ * `lastRun` and `now`.  For each expression we find the most recent scheduled
+ * time at or before `now` — if that time falls after `lastRun`, the cron has
+ * "fired" and we should trigger a run.
+ */
+function shouldCronFire(cronExpressions: string[], lastRun: Date, now: Date): boolean {
+  for (const expr of cronExpressions) {
+    try {
+      const parsed = parseCron(expr);
+      const prev = previousCronTick(parsed, now);
+      if (prev && prev.getTime() > lastRun.getTime()) {
+        return true;
+      }
+    } catch {
+      // Invalid cron expression — skip silently
+    }
+  }
+  return false;
+}
 
 const heartbeatRunListColumns = {
   id: heartbeatRuns.id,
@@ -1216,9 +1238,18 @@ export function heartbeatService(db: Db) {
     const runtimeConfig = parseObject(agent.runtimeConfig);
     const heartbeat = parseObject(runtimeConfig.heartbeat);
 
+    // Parse cronSchedules — must be an array of non-empty strings
+    let cronSchedules: string[] = [];
+    if (Array.isArray(heartbeat.cronSchedules)) {
+      cronSchedules = heartbeat.cronSchedules.filter(
+        (v: unknown): v is string => typeof v === "string" && v.trim().length > 0,
+      );
+    }
+
     return {
       enabled: asBoolean(heartbeat.enabled, true),
       intervalSec: Math.max(0, asNumber(heartbeat.intervalSec, 0)),
+      cronSchedules,
       wakeOnDemand: asBoolean(heartbeat.wakeOnDemand ?? heartbeat.wakeOnAssignment ?? heartbeat.wakeOnOnDemand ?? heartbeat.wakeOnAutomation, true),
       maxConcurrentRuns: normalizeMaxConcurrentRuns(heartbeat.maxConcurrentRuns),
     };
@@ -3234,12 +3265,37 @@ export function heartbeatService(db: Db) {
       for (const agent of allAgents) {
         if (agent.status === "paused" || agent.status === "terminated" || agent.status === "pending_approval") continue;
         const policy = parseHeartbeatPolicy(agent);
-        if (!policy.enabled || policy.intervalSec <= 0) continue;
+        if (!policy.enabled) continue;
+
+        const hasCron = policy.cronSchedules.length > 0;
+        const hasInterval = policy.intervalSec > 0;
+
+        // Must have at least one timer mechanism
+        if (!hasCron && !hasInterval) continue;
 
         checked += 1;
-        const baseline = new Date(agent.lastHeartbeatAt ?? agent.createdAt).getTime();
-        const elapsedMs = now.getTime() - baseline;
-        if (elapsedMs < policy.intervalSec * 1000) continue;
+        const baseline = new Date(agent.lastHeartbeatAt ?? agent.createdAt);
+
+        let shouldFire = false;
+        let reason = "";
+
+        if (hasCron) {
+          // Cron takes precedence: check if any expression would have fired
+          // since the last run.
+          if (shouldCronFire(policy.cronSchedules, baseline, now)) {
+            shouldFire = true;
+            reason = "cron_schedule";
+          }
+        } else {
+          // Fallback to classic interval math
+          const elapsedMs = now.getTime() - baseline.getTime();
+          if (elapsedMs >= policy.intervalSec * 1000) {
+            shouldFire = true;
+            reason = "interval_elapsed";
+          }
+        }
+
+        if (!shouldFire) continue;
 
         const run = await enqueueWakeup(agent.id, {
           source: "timer",
@@ -3249,7 +3305,7 @@ export function heartbeatService(db: Db) {
           requestedByActorId: "heartbeat_scheduler",
           contextSnapshot: {
             source: "scheduler",
-            reason: "interval_elapsed",
+            reason,
             now: now.toISOString(),
           },
         });

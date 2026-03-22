@@ -180,6 +180,9 @@ export function NewAgent() {
         heartbeat: {
           enabled: configValues.heartbeatEnabled,
           intervalSec: configValues.intervalSec,
+          ...(configValues.cronSchedules && configValues.cronSchedules.length > 0
+            ? { cronSchedules: configValues.cronSchedules }
+            : {}),
           wakeOnDemand: true,
           cooldownSec: 10,
           maxConcurrentRuns: 1,

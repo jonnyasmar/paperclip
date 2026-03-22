@@ -215,9 +215,16 @@ export function agentRoutes(db: Db) {
 
   function parseSchedulerHeartbeatPolicy(runtimeConfig: unknown) {
     const heartbeat = asRecord(asRecord(runtimeConfig)?.heartbeat) ?? {};
+    let cronSchedules: string[] = [];
+    if (Array.isArray(heartbeat.cronSchedules)) {
+      cronSchedules = (heartbeat.cronSchedules as unknown[]).filter(
+        (v): v is string => typeof v === "string" && v.trim().length > 0,
+      );
+    }
     return {
       enabled: parseBooleanLike(heartbeat.enabled) ?? true,
       intervalSec: Math.max(0, parseNumberLike(heartbeat.intervalSec) ?? 0),
+      cronSchedules,
     };
   }
 
@@ -525,13 +532,14 @@ export function agentRoutes(db: Db) {
           status: row.status as InstanceSchedulerHeartbeatAgent["status"],
           adapterType: row.adapterType,
           intervalSec: policy.intervalSec,
+          cronSchedules: policy.cronSchedules,
           heartbeatEnabled: policy.enabled,
-          schedulerActive: statusEligible && policy.enabled && policy.intervalSec > 0,
+          schedulerActive: statusEligible && policy.enabled && (policy.intervalSec > 0 || policy.cronSchedules.length > 0),
           lastHeartbeatAt: row.lastHeartbeatAt,
         };
       })
       .filter((item) =>
-        item.intervalSec > 0 &&
+        (item.intervalSec > 0 || item.cronSchedules.length > 0) &&
         item.status !== "paused" &&
         item.status !== "terminated" &&
         item.status !== "pending_approval",

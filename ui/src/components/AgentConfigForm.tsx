@@ -23,7 +23,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { FolderOpen, Heart, ChevronDown, X } from "lucide-react";
+import { FolderOpen, Heart, ChevronDown, X, Plus, Trash2 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { extractModelName, extractProviderId } from "../lib/model-utils";
 import { queryKeys } from "../lib/queryKeys";
@@ -44,6 +44,138 @@ import { ClaudeLocalAdvancedFields } from "../adapters/claude-local/config-field
 import { MarkdownEditor } from "./MarkdownEditor";
 import { ChoosePathButton } from "./PathInstructionsModal";
 import { OpenCodeLogoIcon } from "./OpenCodeLogoIcon";
+
+/* ---- Cron helpers ---- */
+
+/**
+ * Produce a short human-readable description of a cron expression.
+ * Handles common patterns; falls back to the raw expression for complex ones.
+ */
+function describeCron(expr: string): string {
+  const parts = expr.trim().split(/\s+/);
+  if (parts.length !== 5) return "Invalid expression";
+
+  const [min, hour, dom, mon, dow] = parts;
+
+  // Every N minutes: *​/N * * * *
+  if (min!.startsWith("*/") && hour === "*" && dom === "*" && mon === "*" && dow === "*") {
+    const n = min!.slice(2);
+    return n === "1" ? "Every minute" : `Every ${n} minutes`;
+  }
+
+  // Every N hours at minute 0: 0 *​/N * * *
+  if (min === "0" && hour!.startsWith("*/") && dom === "*" && mon === "*" && dow === "*") {
+    const n = hour!.slice(2);
+    return n === "1" ? "Every hour" : `Every ${n} hours`;
+  }
+
+  // Every hour at minute M: M * * * *
+  if (/^\d+$/.test(min!) && hour === "*" && dom === "*" && mon === "*" && dow === "*") {
+    return `Every hour at :${min!.padStart(2, "0")}`;
+  }
+
+  // Daily at specific times: M H * * *
+  if (/^\d+$/.test(min!) && /^[\d,]+$/.test(hour!) && dom === "*" && mon === "*" && dow === "*") {
+    const hours = hour!.split(",").map((h) => {
+      const hh = Number(h);
+      const ampm = hh >= 12 ? "PM" : "AM";
+      const h12 = hh === 0 ? 12 : hh > 12 ? hh - 12 : hh;
+      return `${h12}:${min!.padStart(2, "0")} ${ampm}`;
+    });
+    return `Daily at ${hours.join(", ")}`;
+  }
+
+  // Weekdays at specific time: M H * * 1-5
+  if (/^\d+$/.test(min!) && /^\d+$/.test(hour!) && dom === "*" && mon === "*" && dow === "1-5") {
+    const hh = Number(hour);
+    const ampm = hh >= 12 ? "PM" : "AM";
+    const h12 = hh === 0 ? 12 : hh > 12 ? hh - 12 : hh;
+    return `Weekdays at ${h12}:${min!.padStart(2, "0")} ${ampm}`;
+  }
+
+  return expr;
+}
+
+function CronScheduleEditor({
+  schedules,
+  onChange,
+}: {
+  schedules: string[];
+  onChange: (schedules: string[]) => void;
+}) {
+  const [newExpr, setNewExpr] = useState("");
+
+  function addSchedule() {
+    const trimmed = newExpr.trim();
+    if (!trimmed) return;
+    // Basic validation: must be 5 fields
+    if (trimmed.split(/\s+/).length !== 5) return;
+    onChange([...schedules, trimmed]);
+    setNewExpr("");
+  }
+
+  function removeSchedule(index: number) {
+    onChange(schedules.filter((_, i) => i !== index));
+  }
+
+  function updateSchedule(index: number, value: string) {
+    const updated = [...schedules];
+    updated[index] = value;
+    onChange(updated);
+  }
+
+  return (
+    <div className="space-y-2">
+      {schedules.map((expr, i) => {
+        const parts = expr.trim().split(/\s+/);
+        const isValid = parts.length === 5;
+        return (
+          <div key={i} className="flex items-start gap-2">
+            <div className="flex-1 space-y-0.5">
+              <input
+                className="w-full rounded-md border border-border px-2 py-1 bg-transparent outline-none text-xs font-mono"
+                value={expr}
+                onChange={(e) => updateSchedule(i, e.target.value)}
+                placeholder="* * * * *"
+              />
+              <span className={cn("text-[10px]", isValid ? "text-muted-foreground" : "text-red-500")}>
+                {isValid ? describeCron(expr) : "Must be 5 fields: min hour dom mon dow"}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="mt-1 text-muted-foreground hover:text-red-500 transition-colors"
+              onClick={() => removeSchedule(i)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        );
+      })}
+      <div className="flex items-center gap-2">
+        <input
+          className="flex-1 rounded-md border border-border px-2 py-1 bg-transparent outline-none text-xs font-mono placeholder:text-muted-foreground/40"
+          value={newExpr}
+          onChange={(e) => setNewExpr(e.target.value)}
+          placeholder="*/15 * * * *"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addSchedule();
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent/50 transition-colors"
+          onClick={addSchedule}
+        >
+          <Plus className="h-3 w-3" /> Add
+        </button>
+      </div>
+    </div>
+  );
+}
 
 /* ---- Create mode values ---- */
 
@@ -811,8 +943,16 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
               numberLabel="sec"
               numberPrefix="Run heartbeat every"
               numberHint={help.intervalSec}
-              showNumber={val!.heartbeatEnabled}
+              showNumber={val!.heartbeatEnabled && !(val!.cronSchedules && val!.cronSchedules.length > 0)}
             />
+            {val!.heartbeatEnabled && (
+              <Field label="Cron schedules" hint={help.cronSchedules}>
+                <CronScheduleEditor
+                  schedules={val!.cronSchedules ?? []}
+                  onChange={(v) => set!({ cronSchedules: v })}
+                />
+              </Field>
+            )}
           </div>
         </div>
       ) : (
@@ -833,8 +973,16 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                 numberLabel="sec"
                 numberPrefix="Run heartbeat every"
                 numberHint={help.intervalSec}
-                showNumber={eff("heartbeat", "enabled", heartbeat.enabled !== false)}
+                showNumber={eff("heartbeat", "enabled", heartbeat.enabled !== false) && !(eff("heartbeat", "cronSchedules", (heartbeat.cronSchedules ?? []) as string[]).length > 0)}
               />
+              {eff("heartbeat", "enabled", heartbeat.enabled !== false) && (
+                <Field label="Cron schedules" hint={help.cronSchedules}>
+                  <CronScheduleEditor
+                    schedules={eff("heartbeat", "cronSchedules", (heartbeat.cronSchedules ?? []) as string[])}
+                    onChange={(v) => mark("heartbeat", "cronSchedules", v)}
+                  />
+                </Field>
+              )}
             </div>
             <CollapsibleSection
               title="Advanced Run Policy"
