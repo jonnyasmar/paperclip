@@ -11,6 +11,15 @@ import { notFound, unprocessable } from "../errors.js";
 import { logger } from "../middleware/logger.js";
 import { parseObject, asString } from "../adapters/utils.js";
 import { ensurePathInEnv } from "@paperclipai/adapter-utils/server-utils";
+import {
+  createPersistedChat,
+  readChat,
+  appendMessage,
+  updateSessionId,
+  deletePersistedChat,
+  listChats,
+  type PersistedMessage,
+} from "../services/chat-store.js";
 
 // ---------------------------------------------------------------------------
 // Chat session store (in-memory)
@@ -19,6 +28,8 @@ import { ensurePathInEnv } from "@paperclipai/adapter-utils/server-utils";
 interface ChatSession {
   chatId: string;
   agentId: string;
+  agentName: string;
+  agentIcon: string | null;
   runId?: string;
   sessionId: string | null;
   createdAt: Date;
@@ -55,6 +66,7 @@ function resolveAgentInstructionsPath(agentConfig: Record<string, unknown>): str
 
 /**
  * Spawn a `claude -p` process and stream its output as SSE events.
+ * Also persists user + assistant messages to the chat JSON file.
  */
 function spawnChatMessage(
   session: ChatSession,
@@ -89,7 +101,7 @@ function spawnChatMessage(
     args.push("--append-system-prompt-file", instructionsFilePath);
   }
 
-  args.push("--output-format", "stream-json");
+  args.push("--output-format", "stream-json", "--include-partial-messages");
 
   if (model) {
     args.push("--model", model);
@@ -105,6 +117,16 @@ function spawnChatMessage(
     ...process.env,
     ...envOverrides,
   }) as Record<string, string>;
+
+  // Persist user message
+  const userMsgId = randomUUID();
+  const userMsg: PersistedMessage = {
+    id: userMsgId,
+    role: "user",
+    content: message,
+    timestamp: new Date().toISOString(),
+  };
+  appendMessage(session.chatId, userMsg);
 
   // SSE headers
   res.writeHead(200, {
@@ -129,6 +151,11 @@ function spawnChatMessage(
   let capturedSessionId: string | null = null;
   let stdoutBuffer = "";
 
+  // Accumulate assistant response for persistence
+  let assistantContent = "";
+  let assistantThinking = "";
+  const assistantToolCalls: Array<{ name: string; args: string; result?: string }> = [];
+
   child.stdout!.on("data", (chunk: Buffer) => {
     stdoutBuffer += chunk.toString();
     const lines = stdoutBuffer.split("\n");
@@ -144,6 +171,15 @@ function spawnChatMessage(
         if (event.session_id && typeof event.session_id === "string") {
           capturedSessionId = event.session_id;
         }
+        // Accumulate assistant content for persistence
+        accumulateAssistantContent(event, {
+          onText: (t) => { assistantContent = t; },
+          onTextDelta: (d) => { assistantContent += d; },
+          onThinking: (t) => { assistantThinking = t; },
+          onThinkingDelta: (d) => { assistantThinking += d; },
+          onToolUse: (tc) => { assistantToolCalls.push(tc); },
+          onResult: (r) => { assistantContent = r; },
+        });
         res.write(`data: ${JSON.stringify(event)}\n\n`);
       } catch {
         // Not JSON — skip
@@ -179,6 +215,14 @@ function spawnChatMessage(
         if (event.session_id && typeof event.session_id === "string") {
           capturedSessionId = event.session_id;
         }
+        accumulateAssistantContent(event, {
+          onText: (t) => { assistantContent = t; },
+          onTextDelta: (d) => { assistantContent += d; },
+          onThinking: (t) => { assistantThinking = t; },
+          onThinkingDelta: (d) => { assistantThinking += d; },
+          onToolUse: (tc) => { assistantToolCalls.push(tc); },
+          onResult: (r) => { assistantContent = r; },
+        });
         res.write(`data: ${JSON.stringify(event)}\n\n`);
       } catch {
         // Not JSON — skip
@@ -188,6 +232,20 @@ function spawnChatMessage(
     // Save session ID
     if (capturedSessionId) {
       session.sessionId = capturedSessionId;
+      updateSessionId(session.chatId, capturedSessionId);
+    }
+
+    // Persist assistant message
+    if (assistantContent || assistantThinking || assistantToolCalls.length > 0) {
+      const assistantMsg: PersistedMessage = {
+        id: randomUUID(),
+        role: "assistant",
+        content: assistantContent,
+        timestamp: new Date().toISOString(),
+      };
+      if (assistantThinking) assistantMsg.thinking = assistantThinking;
+      if (assistantToolCalls.length > 0) assistantMsg.toolCalls = assistantToolCalls;
+      appendMessage(session.chatId, assistantMsg);
     }
 
     try {
@@ -214,6 +272,59 @@ function spawnChatMessage(
   });
 }
 
+/**
+ * Extract content from stream events for persistence accumulation.
+ */
+function accumulateAssistantContent(
+  event: Record<string, unknown>,
+  handlers: {
+    onText: (text: string) => void;
+    onTextDelta: (delta: string) => void;
+    onThinking: (text: string) => void;
+    onThinkingDelta: (delta: string) => void;
+    onToolUse: (tc: { name: string; args: string }) => void;
+    onResult: (result: string) => void;
+  },
+) {
+  const type = event.type as string | undefined;
+
+  if (type === "assistant") {
+    const message = event.message as { content?: Array<Record<string, unknown>> } | undefined;
+    if (message?.content) {
+      for (const block of message.content) {
+        if (block.type === "text" && typeof block.text === "string") {
+          handlers.onText(block.text);
+        } else if (block.type === "thinking" && typeof block.thinking === "string") {
+          handlers.onThinking(block.thinking);
+        } else if (block.type === "tool_use") {
+          handlers.onToolUse({
+            name: (block.name as string) ?? "unknown",
+            args: typeof block.input === "string"
+              ? block.input
+              : JSON.stringify(block.input ?? {}, null, 2),
+          });
+        }
+      }
+    }
+  }
+
+  if (type === "content_block_delta") {
+    const delta = event.delta as Record<string, unknown> | undefined;
+    if (delta?.type === "text_delta" && typeof delta.text === "string") {
+      handlers.onTextDelta(delta.text);
+    }
+    if (delta?.type === "thinking_delta" && typeof delta.thinking === "string") {
+      handlers.onThinkingDelta(delta.thinking);
+    }
+  }
+
+  if (type === "result") {
+    if (typeof event.result === "string" && event.result) {
+      handlers.onResult(event.result);
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Route factory
 // ---------------------------------------------------------------------------
@@ -222,6 +333,44 @@ export function chatRoutes(db: Db) {
   const router = Router();
   const agents = agentService(db);
   const heartbeat = heartbeatService(db);
+
+  // =========================================================================
+  // Chat Persistence — List / Get / Delete
+  // =========================================================================
+
+  // GET /chats — List all persisted chats (summaries)
+  router.get("/chats", async (req: Request, res: Response) => {
+    assertBoard(req);
+    const summaries = listChats();
+    res.json(summaries);
+  });
+
+  // GET /chats/:chatId — Get a specific chat with all messages
+  router.get("/chats/:chatId", async (req: Request, res: Response) => {
+    assertBoard(req);
+    const chatId = req.params.chatId as string;
+    const chat = readChat(chatId);
+    if (!chat) throw notFound("Chat not found");
+    res.json(chat);
+  });
+
+  // DELETE /chats/:chatId — Delete a persisted chat
+  router.delete("/chats/:chatId", async (req: Request, res: Response) => {
+    assertBoard(req);
+    const chatId = req.params.chatId as string;
+
+    // Also clean up in-memory session if active
+    const session = chatSessions.get(chatId);
+    if (session) {
+      if (session.activeChild && !session.activeChild.killed) {
+        session.activeChild.kill("SIGTERM");
+      }
+      chatSessions.delete(chatId);
+    }
+
+    deletePersistedChat(chatId);
+    res.json({ ok: true });
+  });
 
   // =========================================================================
   // Free Chat
@@ -238,11 +387,22 @@ export function chatRoutes(db: Db) {
     const session: ChatSession = {
       chatId,
       agentId: agent.id,
+      agentName: agent.name,
+      agentIcon: (agent.icon as string) ?? null,
       sessionId: null,
       createdAt: new Date(),
       activeChild: null,
     };
     chatSessions.set(chatId, session);
+
+    // Persist to file
+    createPersistedChat({
+      chatId,
+      agentId: agent.id,
+      agentName: agent.name,
+      agentIcon: (agent.icon as string) ?? null,
+      sessionId: null,
+    });
 
     res.json({ chatId, sessionId: null });
   });
@@ -262,7 +422,27 @@ export function chatRoutes(db: Db) {
         throw unprocessable("chatId and message are required");
       }
 
-      const session = getSession(chatId);
+      // Try in-memory session first, otherwise restore from disk
+      let session = chatSessions.get(chatId);
+      if (!session) {
+        const persisted = readChat(chatId);
+        if (persisted && persisted.agentId === agentId) {
+          session = {
+            chatId: persisted.chatId,
+            agentId: persisted.agentId,
+            agentName: persisted.agentName,
+            agentIcon: persisted.agentIcon,
+            runId: persisted.runId ?? undefined,
+            sessionId: persisted.sessionId,
+            createdAt: new Date(persisted.createdAt),
+            activeChild: null,
+          };
+          chatSessions.set(chatId, session);
+        } else {
+          throw notFound("Chat session not found");
+        }
+      }
+
       if (session.agentId !== agentId) {
         throw unprocessable("Chat session does not belong to this agent");
       }
@@ -275,7 +455,7 @@ export function chatRoutes(db: Db) {
     },
   );
 
-  // DELETE /agents/:agentId/chat?chatId=... — End the chat session
+  // DELETE /agents/:agentId/chat?chatId=... — End the chat session (in-memory only, preserves persistence)
   router.delete(
     "/agents/:agentId/chat",
     async (req: Request, res: Response) => {
@@ -330,16 +510,31 @@ export function chatRoutes(db: Db) {
     // Extract session ID from the run
     const sessionIdAfter = run.sessionIdAfter ?? null;
 
+    // Get agent info for persistence
+    const agent = await agents.getById(run.agentId);
+
     const chatId = randomUUID();
     const session: ChatSession = {
       chatId,
       agentId: run.agentId,
+      agentName: agent?.name ?? "Unknown",
+      agentIcon: (agent?.icon as string) ?? null,
       runId,
       sessionId: sessionIdAfter,
       createdAt: new Date(),
       activeChild: null,
     };
     chatSessions.set(chatId, session);
+
+    // Persist to file
+    createPersistedChat({
+      chatId,
+      agentId: run.agentId,
+      agentName: agent?.name ?? "Unknown",
+      agentIcon: (agent?.icon as string) ?? null,
+      runId,
+      sessionId: sessionIdAfter,
+    });
 
     res.json({ chatId, sessionId: sessionIdAfter, runId });
   });
@@ -359,7 +554,27 @@ export function chatRoutes(db: Db) {
         throw unprocessable("chatId and message are required");
       }
 
-      const session = getSession(chatId);
+      // Try in-memory session first, otherwise restore from disk
+      let session = chatSessions.get(chatId);
+      if (!session) {
+        const persisted = readChat(chatId);
+        if (persisted && persisted.runId === runId) {
+          session = {
+            chatId: persisted.chatId,
+            agentId: persisted.agentId,
+            agentName: persisted.agentName,
+            agentIcon: persisted.agentIcon,
+            runId: persisted.runId ?? undefined,
+            sessionId: persisted.sessionId,
+            createdAt: new Date(persisted.createdAt),
+            activeChild: null,
+          };
+          chatSessions.set(chatId, session);
+        } else {
+          throw notFound("Chat session not found");
+        }
+      }
+
       if (session.runId !== runId) {
         throw unprocessable("Chat session does not belong to this run");
       }
@@ -412,6 +627,9 @@ export function chatRoutes(db: Db) {
       });
 
       chatSessions.delete(chatId);
+
+      // Delete persisted chat for run injection chats (they are temporary)
+      deletePersistedChat(chatId);
 
       res.json({ ok: true, resumedRunId: runId });
     },

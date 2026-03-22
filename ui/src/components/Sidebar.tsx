@@ -9,6 +9,7 @@ import {
   SquarePen,
   Network,
   Settings,
+  MessageCircle,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { SidebarSection } from "./SidebarSection";
@@ -17,6 +18,7 @@ import { SidebarProjects } from "./SidebarProjects";
 import { SidebarAgents } from "./SidebarAgents";
 import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
+import { useChat } from "../context/ChatContext";
 import { heartbeatsApi } from "../api/heartbeats";
 import { queryKeys } from "../lib/queryKeys";
 import { useInboxBadge } from "../hooks/useInboxBadge";
@@ -26,6 +28,7 @@ import { PluginSlotOutlet } from "@/plugins/slots";
 export function Sidebar() {
   const { openNewIssue } = useDialog();
   const { selectedCompanyId, selectedCompany } = useCompany();
+  const { openChatPanel } = useChat();
   const inboxBadge = useInboxBadge(selectedCompanyId);
   const { data: liveRuns } = useQuery({
     queryKey: queryKeys.liveRuns(selectedCompanyId!),
@@ -57,6 +60,15 @@ export function Sidebar() {
         <span className="flex-1 text-sm font-bold text-foreground truncate pl-1">
           {selectedCompany?.name ?? "Select company"}
         </span>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground shrink-0"
+          onClick={openChatPanel}
+          title="Chats"
+        >
+          <MessageCircle className="h-4 w-4" />
+        </Button>
         <Button
           variant="ghost"
           size="icon-sm"

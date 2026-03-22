@@ -31,12 +31,22 @@ interface ChatMessage {
   timestamp: Date;
 }
 
+interface InitialMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  thinking?: string;
+  toolCalls?: ToolCall[];
+  timestamp: string;
+}
+
 interface ChatViewProps {
   agentId: string;
   agentName: string;
   agentIcon?: string | null;
   chatId: string;
   runId?: string;
+  initialMessages?: InitialMessage[];
 }
 
 // ---------------------------------------------------------------------------
@@ -47,8 +57,20 @@ function useStreamingChat(
   agentId: string,
   chatId: string,
   runId?: string,
+  initialMessages?: InitialMessage[],
 ) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    if (!initialMessages?.length) return [];
+    return initialMessages.map((m) => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      thinking: m.thinking,
+      toolCalls: m.toolCalls,
+      streaming: false,
+      timestamp: new Date(m.timestamp),
+    }));
+  });
   const [isStreaming, setIsStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -218,27 +240,43 @@ function applyStreamEvent(msg: ChatMessage, event: Record<string, unknown>): Cha
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function ThinkingBlock({ text }: { text: string }) {
-  const [expanded, setExpanded] = useState(false);
+function ThinkingBlock({ text, streaming }: { text: string; streaming?: boolean }) {
+  const [expanded, setExpanded] = useState(true);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll thinking card while streaming
+  useEffect(() => {
+    if (streaming && expanded && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [text, streaming, expanded]);
 
   if (!text) return null;
 
   return (
-    <div className="mt-1 mb-2">
+    <div className="mt-2 mb-2 rounded-lg border border-muted-foreground/15 bg-muted/20 overflow-hidden">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+        className="flex items-center gap-1.5 w-full px-3 py-1.5 text-xs text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/30 transition-colors"
       >
         {expanded ? (
-          <ChevronDown className="h-3 w-3" />
+          <ChevronDown className="h-3 w-3 shrink-0" />
         ) : (
-          <ChevronRight className="h-3 w-3" />
+          <ChevronRight className="h-3 w-3 shrink-0" />
         )}
-        <span className="italic">Thinking...</span>
+        <span className="italic">Thinking{streaming ? "..." : ""}</span>
+        {!expanded && (
+          <span className="ml-auto text-[10px] text-muted-foreground/40 truncate max-w-[200px]">
+            {text.slice(0, 60)}...
+          </span>
+        )}
       </button>
       {expanded && (
-        <div className="mt-1 pl-4 border-l-2 border-muted-foreground/20 text-xs text-muted-foreground/60 italic whitespace-pre-wrap">
+        <div
+          ref={scrollRef}
+          className="px-3 pb-2 max-h-48 overflow-y-auto text-xs text-muted-foreground/60 italic whitespace-pre-wrap leading-relaxed"
+        >
           {text}
         </div>
       )}
@@ -250,24 +288,42 @@ function ToolCallBlock({ toolCall }: { toolCall: ToolCall }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="mt-1">
+    <div className="mt-1.5 rounded-lg border border-muted-foreground/15 bg-muted/20 overflow-hidden">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1.5 text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+        className="flex items-center gap-1.5 w-full px-3 py-1.5 text-xs text-muted-foreground/70 hover:text-muted-foreground hover:bg-muted/30 transition-colors"
       >
-        <Wrench className="h-3 w-3" />
-        <span className="font-mono">{toolCall.name}</span>
-        {expanded ? (
-          <ChevronDown className="h-3 w-3" />
-        ) : (
-          <ChevronRight className="h-3 w-3" />
+        <Wrench className="h-3 w-3 shrink-0 text-blue-400/70" />
+        <span className="font-mono font-medium">{toolCall.name}</span>
+        {toolCall.result && (
+          <span className="ml-1 text-[10px] text-green-400/60">✓</span>
         )}
+        <span className="ml-auto">
+          {expanded ? (
+            <ChevronDown className="h-3 w-3" />
+          ) : (
+            <ChevronRight className="h-3 w-3" />
+          )}
+        </span>
       </button>
       {expanded && (
-        <pre className="mt-1 ml-5 p-2 rounded-md bg-muted/50 text-[11px] text-muted-foreground overflow-x-auto max-h-40">
-          {toolCall.args}
-        </pre>
+        <div className="border-t border-muted-foreground/10">
+          <div className="px-3 py-1.5">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground/40 mb-1">Input</div>
+            <pre className="p-2 rounded-md bg-black/20 text-[11px] text-muted-foreground overflow-x-auto max-h-40 overflow-y-auto">
+              {toolCall.args}
+            </pre>
+          </div>
+          {toolCall.result && (
+            <div className="px-3 py-1.5 border-t border-muted-foreground/10">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground/40 mb-1">Output</div>
+              <pre className="p-2 rounded-md bg-black/20 text-[11px] text-muted-foreground overflow-x-auto max-h-40 overflow-y-auto">
+                {toolCall.result}
+              </pre>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
@@ -304,7 +360,7 @@ function MessageBubble({
           {agentName}
         </div>
 
-        {message.thinking && <ThinkingBlock text={message.thinking} />}
+        {message.thinking && <ThinkingBlock text={message.thinking} streaming={message.streaming} />}
 
         {message.toolCalls?.map((tc, i) => (
           <ToolCallBlock key={i} toolCall={tc} />
@@ -340,11 +396,13 @@ export function ChatView({
   agentIcon,
   chatId,
   runId,
+  initialMessages,
 }: ChatViewProps) {
   const { messages, isStreaming, sendMessage } = useStreamingChat(
     agentId,
     chatId,
     runId,
+    initialMessages,
   );
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
