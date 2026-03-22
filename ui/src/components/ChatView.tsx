@@ -186,8 +186,29 @@ function useStreamingChat(
 function applyStreamEvent(msg: ChatMessage, event: Record<string, unknown>): ChatMessage {
   const type = event.type as string | undefined;
 
+  // stream_event wraps raw API streaming events (from --include-partial-messages)
+  // Structure: { type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "..." } } }
+  if (type === "stream_event") {
+    const inner = event.event as Record<string, unknown> | undefined;
+    if (!inner) return msg;
+
+    const innerType = inner.type as string | undefined;
+
+    if (innerType === "content_block_delta") {
+      const delta = inner.delta as Record<string, unknown> | undefined;
+      if (delta?.type === "text_delta" && typeof delta.text === "string") {
+        return { ...msg, content: msg.content + delta.text };
+      }
+      if (delta?.type === "thinking_delta" && typeof delta.thinking === "string") {
+        return { ...msg, thinking: (msg.thinking ?? "") + delta.thinking };
+      }
+    }
+
+    return msg;
+  }
+
   if (type === "assistant") {
-    // Content block messages
+    // Full content snapshot messages (without --include-partial-messages, or final state)
     const message = event.message as { content?: Array<Record<string, unknown>> } | undefined;
     if (message?.content) {
       let content = msg.content;
@@ -200,12 +221,17 @@ function applyStreamEvent(msg: ChatMessage, event: Record<string, unknown>): Cha
         } else if (block.type === "thinking" && typeof block.thinking === "string") {
           thinking = block.thinking;
         } else if (block.type === "tool_use") {
-          toolCalls.push({
-            name: (block.name as string) ?? "unknown",
-            args: typeof block.input === "string"
-              ? block.input
-              : JSON.stringify(block.input ?? {}, null, 2),
-          });
+          const toolId = `${block.name}-${toolCalls.length}`;
+          // Only add if we haven't seen this tool call yet
+          const existing = toolCalls.find((tc) => tc.name === block.name && tc.args === (typeof block.input === "string" ? block.input : JSON.stringify(block.input ?? {}, null, 2)));
+          if (!existing) {
+            toolCalls.push({
+              name: (block.name as string) ?? "unknown",
+              args: typeof block.input === "string"
+                ? block.input
+                : JSON.stringify(block.input ?? {}, null, 2),
+            });
+          }
         }
       }
 
@@ -215,6 +241,7 @@ function applyStreamEvent(msg: ChatMessage, event: Record<string, unknown>): Cha
   }
 
   if (type === "content_block_delta") {
+    // Top-level delta (fallback for non-stream_event format)
     const delta = event.delta as Record<string, unknown> | undefined;
     if (delta?.type === "text_delta" && typeof delta.text === "string") {
       return { ...msg, content: msg.content + delta.text };
@@ -226,8 +253,8 @@ function applyStreamEvent(msg: ChatMessage, event: Record<string, unknown>): Cha
   }
 
   if (type === "result") {
-    // Final result — may include the full text
-    if (typeof event.result === "string" && event.result) {
+    // Final result — use as fallback if no text was streamed
+    if (typeof event.result === "string" && event.result && !msg.content) {
       return { ...msg, content: event.result };
     }
     return msg;
