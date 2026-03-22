@@ -271,7 +271,6 @@ function ThinkingBlock({ text, streaming }: { text: string; streaming?: boolean 
   const [expanded, setExpanded] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll thinking card while streaming
   useEffect(() => {
     if (streaming && expanded && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -281,28 +280,19 @@ function ThinkingBlock({ text, streaming }: { text: string; streaming?: boolean 
   if (!text) return null;
 
   return (
-    <div className="mt-2 mb-2 rounded-lg border border-muted-foreground/15 bg-muted/20 overflow-hidden">
+    <div className="mb-1">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1.5 w-full px-3 py-1.5 text-xs text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/30 transition-colors"
+        className="flex items-center gap-1 text-[11px] text-muted-foreground/40 hover:text-muted-foreground/60 transition-colors"
       >
-        {expanded ? (
-          <ChevronDown className="h-3 w-3 shrink-0" />
-        ) : (
-          <ChevronRight className="h-3 w-3 shrink-0" />
-        )}
+        {expanded ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />}
         <span className="italic">Thinking{streaming ? "..." : ""}</span>
-        {!expanded && (
-          <span className="ml-auto text-[10px] text-muted-foreground/40 truncate max-w-[200px]">
-            {text.slice(0, 60)}...
-          </span>
-        )}
       </button>
       {expanded && (
         <div
           ref={scrollRef}
-          className="px-3 pb-2 max-h-48 overflow-y-auto text-xs text-muted-foreground/60 italic whitespace-pre-wrap leading-relaxed"
+          className="max-h-32 overflow-y-auto text-[11px] text-muted-foreground/35 italic whitespace-pre-wrap leading-relaxed pl-3.5"
         >
           {text}
         </div>
@@ -315,40 +305,26 @@ function ToolCallBlock({ toolCall }: { toolCall: ToolCall }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="mt-1.5 rounded-lg border border-muted-foreground/15 bg-muted/20 overflow-hidden">
+    <div className="mb-0.5">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1.5 w-full px-3 py-1.5 text-xs text-muted-foreground/70 hover:text-muted-foreground hover:bg-muted/30 transition-colors"
+        className="flex items-center gap-1 text-[11px] text-muted-foreground/40 hover:text-muted-foreground/60 transition-colors"
       >
-        <Wrench className="h-3 w-3 shrink-0 text-blue-400/70" />
-        <span className="font-mono font-medium">{toolCall.name}</span>
-        {toolCall.result && (
-          <span className="ml-1 text-[10px] text-green-400/60">✓</span>
-        )}
-        <span className="ml-auto">
-          {expanded ? (
-            <ChevronDown className="h-3 w-3" />
-          ) : (
-            <ChevronRight className="h-3 w-3" />
-          )}
-        </span>
+        <Wrench className="h-2.5 w-2.5" />
+        <span className="font-mono">{toolCall.name}</span>
+        {toolCall.result && <span className="text-green-400/50 text-[9px]">✓</span>}
+        {expanded ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />}
       </button>
       {expanded && (
-        <div className="border-t border-muted-foreground/10">
-          <div className="px-3 py-1.5">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground/40 mb-1">Input</div>
-            <pre className="p-2 rounded-md bg-black/20 text-[11px] text-muted-foreground overflow-x-auto max-h-40 overflow-y-auto">
-              {toolCall.args}
-            </pre>
-          </div>
+        <div className="pl-3.5 mt-0.5">
+          <pre className="text-[10px] text-muted-foreground/30 overflow-x-auto max-h-32 overflow-y-auto whitespace-pre-wrap">
+            {toolCall.args}
+          </pre>
           {toolCall.result && (
-            <div className="px-3 py-1.5 border-t border-muted-foreground/10">
-              <div className="text-[10px] uppercase tracking-wide text-muted-foreground/40 mb-1">Output</div>
-              <pre className="p-2 rounded-md bg-black/20 text-[11px] text-muted-foreground overflow-x-auto max-h-40 overflow-y-auto">
-                {toolCall.result}
-              </pre>
-            </div>
+            <pre className="text-[10px] text-muted-foreground/30 overflow-x-auto max-h-32 overflow-y-auto whitespace-pre-wrap mt-1 pt-1 border-t border-muted-foreground/10">
+              {toolCall.result}
+            </pre>
           )}
         </div>
       )}

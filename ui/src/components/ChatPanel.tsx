@@ -34,10 +34,12 @@ function ChatListView({
   onNewChat,
   onResumeChat,
   onDeleteChat,
+  onClose,
 }: {
   onNewChat: () => void;
   onResumeChat: (chatId: string) => void;
   onDeleteChat: (chatId: string) => void;
+  onClose: () => void;
 }) {
   const { data: chats, isLoading } = useQuery({
     queryKey: ["chats"],
@@ -59,6 +61,15 @@ function ChatListView({
           title="New chat"
         >
           <Plus className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground shrink-0"
+          onClick={onClose}
+          title="Close"
+        >
+          <X className="h-4 w-4" />
         </Button>
       </div>
 
@@ -364,22 +375,12 @@ export function ChatPanel() {
             onSelectAgent={(agent) => void handleSelectAgent(agent)}
           />
         ) : (
-          <>
-            <ChatListView
-              onNewChat={handleNewChat}
-              onResumeChat={(chatId) => void handleResumeChat(chatId)}
-              onDeleteChat={(chatId) => void handleDeleteChat(chatId)}
-            />
-            {/* Close button at top right */}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="absolute top-3 right-3 text-muted-foreground"
-              onClick={() => toggleChatPanel()}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </>
+          <ChatListView
+            onNewChat={handleNewChat}
+            onResumeChat={(chatId) => void handleResumeChat(chatId)}
+            onDeleteChat={(chatId) => void handleDeleteChat(chatId)}
+            onClose={() => toggleChatPanel()}
+          />
         )}
       </SheetContent>
     </Sheet>
