@@ -526,7 +526,7 @@ export function ChatView({
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="text-muted-foreground/40 shrink-0"
+            className="text-muted-foreground/40 shrink-0 self-end mb-0.5"
             disabled
             title="File attachments (coming soon)"
           >
@@ -556,7 +556,7 @@ export function ChatView({
               type="button"
               variant="ghost"
               size="icon-sm"
-              className="text-muted-foreground/60 hover:text-foreground shrink-0"
+              className="text-muted-foreground/60 hover:text-foreground shrink-0 self-end mb-0.5"
               onClick={handleVoice}
               title="Voice input"
             >
@@ -568,7 +568,7 @@ export function ChatView({
           <Button
             type="button"
             size="icon-sm"
-            className="shrink-0"
+            className="shrink-0 self-end mb-0.5"
             disabled={!inputValue.trim() || isStreaming}
             onClick={handleSend}
             title="Send message"
