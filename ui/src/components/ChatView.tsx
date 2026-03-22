@@ -221,16 +221,28 @@ function applyStreamEvent(msg: ChatMessage, event: Record<string, unknown>): Cha
         } else if (block.type === "thinking" && typeof block.thinking === "string") {
           thinking = block.thinking;
         } else if (block.type === "tool_use") {
-          const toolId = `${block.name}-${toolCalls.length}`;
           // Only add if we haven't seen this tool call yet
-          const existing = toolCalls.find((tc) => tc.name === block.name && tc.args === (typeof block.input === "string" ? block.input : JSON.stringify(block.input ?? {}, null, 2)));
+          const args = typeof block.input === "string"
+            ? block.input
+            : JSON.stringify(block.input ?? {}, null, 2);
+          const existing = toolCalls.find((tc) => tc.name === block.name && tc.args === args);
           if (!existing) {
             toolCalls.push({
               name: (block.name as string) ?? "unknown",
-              args: typeof block.input === "string"
-                ? block.input
-                : JSON.stringify(block.input ?? {}, null, 2),
+              args,
             });
+          }
+        } else if (block.type === "tool_result") {
+          // Tool result — attach to the most recent matching tool call
+          const resultContent = typeof block.content === "string"
+            ? block.content
+            : Array.isArray(block.content)
+              ? (block.content as Array<Record<string, unknown>>).map((c) => c.text ?? JSON.stringify(c)).join("\n")
+              : JSON.stringify(block.content ?? "");
+          // Attach to last tool call without a result
+          const lastWithoutResult = [...toolCalls].reverse().find((tc) => !tc.result);
+          if (lastWithoutResult) {
+            lastWithoutResult.result = resultContent;
           }
         }
       }

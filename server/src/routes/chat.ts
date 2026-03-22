@@ -102,7 +102,7 @@ function spawnChatMessage(
     args.push("--append-system-prompt-file", instructionsFilePath);
   }
 
-  args.push("--output-format", "stream-json", "--include-partial-messages");
+  args.push("--output-format", "stream-json", "--include-partial-messages", "--dangerously-skip-permissions");
 
   if (model) {
     args.push("--model", model);
