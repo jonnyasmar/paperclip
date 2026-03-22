@@ -25,7 +25,9 @@ import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { logger } from "./middleware/logger.js";
 import { setupLiveEventsWebSocketServer } from "./realtime/live-events-ws.js";
-import { heartbeatService, reconcilePersistedRuntimeServicesOnStartup } from "./services/index.js";
+import { agentService, heartbeatService, reconcilePersistedRuntimeServicesOnStartup } from "./services/index.js";
+import { hotRestartService } from "./services/hot-restart.js";
+import { publishGlobalLiveEvent } from "./services/live-events.js";
 import { createStorageServiceFromConfig } from "./storage/index.js";
 import { printStartupBanner } from "./startup-banner.js";
 import { getBoardClaimWarningUrl, initializeBoardClaimChallenge } from "./board-claim.js";
@@ -462,6 +464,71 @@ export async function startServer(): Promise<StartedServer> {
   const listenPort = await detectPort(config.port);
   const uiMode = config.uiDevMiddleware ? "vite-dev" : config.serveUi ? "static" : "none";
   const storageService = createStorageServiceFromConfig(config);
+
+  const hotRestartSvc = hotRestartService({
+    getActiveRunCount: async () => {
+      const { heartbeatRuns: hbRuns } = await import("@paperclipai/db");
+      const { inArray } = await import("drizzle-orm");
+      const rows = await (db as any)
+        .select({ id: hbRuns.id })
+        .from(hbRuns)
+        .where(inArray(hbRuns.status, ["queued", "running"]));
+      return rows.length;
+    },
+    pauseAllAgents: async (companyId: string) => {
+      const svc = agentService(db as any);
+      const allAgents = await svc.list(companyId);
+      const pausedIds: string[] = [];
+      for (const agent of allAgents) {
+        if (agent.status === "paused" || agent.status === "terminated" || agent.status === "pending_approval") continue;
+        try {
+          await svc.pause(agent.id, "system");
+          pausedIds.push(agent.id);
+        } catch {
+          // Agent may already be in an incompatible state
+        }
+      }
+      return pausedIds;
+    },
+    resumeAllAgents: async (agentIds: string[]) => {
+      const svc = agentService(db as any);
+      for (const id of agentIds) {
+        try {
+          await svc.resume(id);
+        } catch {
+          // Agent may have been deleted or terminated
+        }
+      }
+    },
+    cancelActiveRuns: async (companyId: string) => {
+      const { heartbeatRuns: hbRuns } = await import("@paperclipai/db");
+      const { inArray: inArr } = await import("drizzle-orm");
+      const heartbeat = heartbeatService(db as any);
+      const runs = await (db as any)
+        .select({ id: hbRuns.id, agentId: hbRuns.agentId })
+        .from(hbRuns)
+        .where(
+          and(
+            eq(hbRuns.companyId, companyId),
+            inArr(hbRuns.status, ["queued", "running"]),
+          ),
+        );
+      for (const run of runs) {
+        await heartbeat.cancelRun(run.id);
+      }
+    },
+    publishGlobalEvent: (event) => {
+      publishGlobalLiveEvent({
+        type: event.type as any,
+        payload: event.payload,
+      });
+    },
+    shutdown: () => {
+      logger.info("Hot-restart: shutting down server process");
+      process.exit(0);
+    },
+  });
+
   const app = await createApp(db as any, {
     uiMode,
     serverPort: listenPort,
@@ -474,6 +541,7 @@ export async function startServer(): Promise<StartedServer> {
     companyDeletionEnabled: config.companyDeletionEnabled,
     betterAuthHandler,
     resolveSession,
+    hotRestart: hotRestartSvc,
   });
   const server = createServer(app as unknown as Parameters<typeof createServer>[0]);
   
@@ -493,6 +561,10 @@ export async function startServer(): Promise<StartedServer> {
   setupLiveEventsWebSocketServer(server, db as any, {
     deploymentMode: config.deploymentMode,
     resolveSessionFromHeaders,
+  });
+
+  void hotRestartSvc.handleStartupResume().catch((err) => {
+    logger.error({ err }, "hot-restart: failed to resume previously paused agents");
   });
 
   void reconcilePersistedRuntimeServicesOnStartup(db as any)

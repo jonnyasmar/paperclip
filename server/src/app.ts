@@ -24,6 +24,7 @@ import { sidebarBadgeRoutes } from "./routes/sidebar-badges.js";
 import { llmRoutes } from "./routes/llms.js";
 import { assetRoutes } from "./routes/assets.js";
 import { accessRoutes } from "./routes/access.js";
+import { systemRoutes } from "./routes/system.js";
 import { pluginRoutes } from "./routes/plugins.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { applyUiBranding } from "./ui-branding.js";
@@ -43,6 +44,7 @@ import { createPluginHostServiceCleanup } from "./services/plugin-host-service-c
 import { pluginRegistryService } from "./services/plugin-registry.js";
 import { createHostClientHandlers } from "@paperclipai/plugin-sdk";
 import type { BetterAuthSessionResult } from "./auth/better-auth.js";
+import type { hotRestartService } from "./services/hot-restart.js";
 
 type UiMode = "none" | "static" | "vite-dev";
 
@@ -63,6 +65,7 @@ export async function createApp(
     localPluginDir?: string;
     betterAuthHandler?: express.RequestHandler;
     resolveSession?: (req: ExpressRequest) => Promise<BetterAuthSessionResult | null>;
+    hotRestart?: ReturnType<typeof hotRestartService>;
   },
 ) {
   const app = express();
@@ -209,6 +212,9 @@ export async function createApp(
       allowedHostnames: opts.allowedHostnames,
     }),
   );
+  if (opts.hotRestart) {
+    api.use(systemRoutes(opts.hotRestart));
+  }
   app.use("/api", api);
   app.use("/api", (_req, res) => {
     res.status(404).json({ error: "API route not found" });
