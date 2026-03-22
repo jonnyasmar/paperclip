@@ -108,6 +108,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         chatId: string;
         sessionId: string | null;
         runId: string;
+        transcript?: Array<{
+          id: string;
+          role: "user" | "assistant";
+          content: string;
+          thinking?: string;
+          toolCalls?: Array<{ name: string; args: string }>;
+          timestamp: string;
+        }>;
       }>(`/runs/${runId}/chat`, {});
       setActiveChat({
         agentId: agent.id,
@@ -116,6 +124,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         chatId: result.chatId,
         runId: result.runId,
         issueTitle,
+        initialMessages: result.transcript,
       });
       setIsChatPanelOpen(true);
     },

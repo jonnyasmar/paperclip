@@ -510,7 +510,79 @@ export function chatRoutes(db: Db) {
       .limit(1);
     if (!run) throw notFound("Run not found");
 
-    // Kill the running process (same as hot-restart)
+    // Extract session ID from the run log BEFORE killing the process
+    // (sessionIdAfter is null while running — we need to parse the log)
+    let sessionId = run.sessionIdAfter ?? null;
+    if (!sessionId && run.logRef) {
+      try {
+        const logBasePath = process.env.RUN_LOG_BASE_PATH
+          ?? (await import("../home-paths.js")).resolvePaperclipInstanceRoot() + "/data/run-logs";
+        const logPath = require("node:path").join(logBasePath, run.logRef);
+        const logContent = require("node:fs").readFileSync(logPath, "utf-8");
+        for (const line of logContent.split("\n")) {
+          if (!line.trim()) continue;
+          try {
+            const entry = JSON.parse(line);
+            if (entry.stream === "stdout") {
+              const msg = JSON.parse(entry.chunk);
+              if (msg.session_id) {
+                sessionId = msg.session_id;
+              }
+            }
+          } catch { /* skip malformed lines */ }
+        }
+      } catch (err) {
+        logger.warn({ runId, err }, "chat: failed to extract session ID from run log");
+      }
+    }
+
+    // Parse run transcript for pre-population
+    const transcriptMessages: PersistedMessage[] = [];
+    if (run.logRef) {
+      try {
+        const logBasePath = process.env.RUN_LOG_BASE_PATH
+          ?? (await import("../home-paths.js")).resolvePaperclipInstanceRoot() + "/data/run-logs";
+        const logPath = require("node:path").join(logBasePath, run.logRef);
+        const logContent = require("node:fs").readFileSync(logPath, "utf-8");
+        for (const line of logContent.split("\n")) {
+          if (!line.trim()) continue;
+          try {
+            const entry = JSON.parse(line);
+            if (entry.stream !== "stdout") continue;
+            const msg = JSON.parse(entry.chunk);
+            if (msg.type === "assistant" && msg.message?.content) {
+              let text = "";
+              let thinking = "";
+              const toolCalls: Array<{ name: string; args: string }> = [];
+              for (const block of msg.message.content) {
+                if (block.type === "text" && block.text) text = block.text;
+                if (block.type === "thinking" && block.thinking) thinking = block.thinking;
+                if (block.type === "tool_use") {
+                  toolCalls.push({
+                    name: block.name ?? "unknown",
+                    args: typeof block.input === "string" ? block.input : JSON.stringify(block.input ?? {}, null, 2),
+                  });
+                }
+              }
+              if (text || toolCalls.length > 0) {
+                transcriptMessages.push({
+                  id: randomUUID(),
+                  role: "assistant",
+                  content: text,
+                  thinking: thinking || undefined,
+                  toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+                  timestamp: entry.ts ?? new Date().toISOString(),
+                });
+              }
+            }
+          } catch { /* skip */ }
+        }
+      } catch (err) {
+        logger.warn({ runId, err }, "chat: failed to parse run transcript");
+      }
+    }
+
+    // Kill the running process
     runningProcess.child.kill("SIGTERM");
     const graceMs = Math.max(1, runningProcess.graceSec) * 1000;
     setTimeout(() => {
@@ -519,36 +591,44 @@ export function chatRoutes(db: Db) {
       }
     }, graceMs);
 
-    // Extract session ID from the run
-    const sessionIdAfter = run.sessionIdAfter ?? null;
-
-    // Get agent info for persistence
+    // Get agent info
     const agent = await agents.getById(run.agentId);
 
     const chatId = randomUUID();
     const session: ChatSession = {
       chatId,
       agentId: run.agentId,
+      companyId: agent?.companyId,
       agentName: agent?.name ?? "Unknown",
       agentIcon: (agent?.icon as string) ?? null,
       runId,
-      sessionId: sessionIdAfter,
+      sessionId,
       createdAt: new Date(),
       activeChild: null,
     };
     chatSessions.set(chatId, session);
 
-    // Persist to file
+    // Persist to file with transcript
     createPersistedChat({
       chatId,
       agentId: run.agentId,
       agentName: agent?.name ?? "Unknown",
       agentIcon: (agent?.icon as string) ?? null,
       runId,
-      sessionId: sessionIdAfter,
+      sessionId,
     });
 
-    res.json({ chatId, sessionId: sessionIdAfter, runId });
+    // Add transcript messages to persisted chat
+    for (const msg of transcriptMessages) {
+      appendMessage(chatId, msg);
+    }
+
+    res.json({
+      chatId,
+      sessionId,
+      runId,
+      transcript: transcriptMessages,
+    });
   });
 
   // POST /runs/:runId/chat/message — Send a message in injected chat
