@@ -491,6 +491,9 @@ export function ChatView({
     const attachments = pendingAttachments.length > 0 ? [...pendingAttachments] : undefined;
     setPendingAttachments([]);
     void sendMessage(text || "See attached file(s).", attachments);
+
+    // Keep focus on input so keyboard stays open on mobile
+    requestAnimationFrame(() => textareaRef.current?.focus());
   }, [inputValue, isStreaming, sendMessage, pendingAttachments]);
 
   const handleFileUpload = useCallback(async (file: File) => {

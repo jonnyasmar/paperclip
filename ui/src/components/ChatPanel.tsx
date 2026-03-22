@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   X,
   LogOut,
@@ -17,6 +17,7 @@ import { AgentIcon } from "./AgentIconPicker";
 import { ChatView } from "./ChatView";
 import { useChat, type ChatSummary } from "../context/ChatContext";
 import { useCompany } from "../context/CompanyContext";
+import { useVisualViewport } from "../hooks/useVisualViewport";
 import { agentsApi } from "../api/agents";
 import { api } from "../api/client";
 import { queryKeys } from "../lib/queryKeys";
@@ -245,8 +246,31 @@ export function ChatPanel() {
     deleteChat,
   } = useChat();
   const queryClient = useQueryClient();
+  const { height: vpHeight, offsetTop: vpOffset } = useVisualViewport();
 
   const [panelView, setPanelView] = useState<PanelView>("list");
+
+  // On mobile (full-screen panel), lock body scroll and black out background
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    if (!isChatPanelOpen || !mq.matches) return;
+
+    const root = document.getElementById("root");
+    if (!root) return;
+
+    const prevOverflow = document.body.style.overflow;
+    const prevHtmlBg = document.documentElement.style.backgroundColor;
+
+    document.body.style.overflow = "hidden";
+    root.style.opacity = "0";
+    document.documentElement.style.backgroundColor = "rgba(0,0,0,0.5)";
+
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      root.style.opacity = "";
+      document.documentElement.style.backgroundColor = prevHtmlBg;
+    };
+  }, [isChatPanelOpen]);
 
   const isRunInjection = !!activeChat?.runId;
 
@@ -287,18 +311,22 @@ export function ChatPanel() {
   };
 
   return (
-    <Sheet
-      open={isChatPanelOpen}
-      onOpenChange={() => {
-        // Controlled — only close via explicit X button
-      }}
-      modal={false}
-    >
-      <SheetContent
+      <Sheet
+        open={isChatPanelOpen}
+        onOpenChange={() => {
+          // Controlled — only close via explicit X button
+        }}
+        modal={false}
+      >
+        <SheetContent
         side="right"
         showCloseButton={false}
         className="w-full sm:max-w-lg p-0 flex flex-col overflow-hidden"
-        style={{ paddingTop: "env(safe-area-inset-top)" }}
+        style={{
+          top: vpOffset,
+          height: vpHeight,
+          paddingTop: "env(safe-area-inset-top)",
+        }}
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
@@ -387,6 +415,6 @@ export function ChatPanel() {
           />
         )}
       </SheetContent>
-    </Sheet>
+      </Sheet>
   );
 }
