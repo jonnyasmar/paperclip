@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import type { Db } from "@paperclipai/db";
 import { heartbeatRuns } from "@paperclipai/db";
 import { eq } from "drizzle-orm";
@@ -519,8 +521,8 @@ export function chatRoutes(db: Db) {
       try {
         const logBasePath = process.env.RUN_LOG_BASE_PATH
           ?? (await import("../home-paths.js")).resolvePaperclipInstanceRoot() + "/data/run-logs";
-        const logPath = require("node:path").join(logBasePath, run.logRef);
-        const logContent = require("node:fs").readFileSync(logPath, "utf-8");
+        const logPath = path.join(logBasePath, run.logRef);
+        const logContent = readFileSync(logPath, "utf-8");
         for (const line of logContent.split("\n")) {
           if (!line.trim()) continue;
           try {
@@ -544,8 +546,8 @@ export function chatRoutes(db: Db) {
       try {
         const logBasePath = process.env.RUN_LOG_BASE_PATH
           ?? (await import("../home-paths.js")).resolvePaperclipInstanceRoot() + "/data/run-logs";
-        const logPath = require("node:path").join(logBasePath, run.logRef);
-        const logContent = require("node:fs").readFileSync(logPath, "utf-8");
+        const logPath = path.join(logBasePath, run.logRef);
+        const logContent = readFileSync(logPath, "utf-8");
         for (const line of logContent.split("\n")) {
           if (!line.trim()) continue;
           try {
