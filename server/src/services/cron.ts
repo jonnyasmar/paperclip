@@ -252,64 +252,70 @@ export function validateCron(expression: string): string | null {
  */
 export function nextCronTick(cron: ParsedCron, after: Date, timezone?: string): Date | null {
   const d = new Date(after.getTime());
+
+  // When an explicit IANA timezone is given, use Intl-based resolution.
+  // Otherwise evaluate against the machine's local time (Date local methods).
+  const useIntlTz = !!timezone;
+
   // Advance to the next whole minute
-  d.setUTCSeconds(0, 0);
-  d.setUTCMinutes(d.getUTCMinutes() + 1);
+  d.setSeconds(0, 0);
+  d.setMinutes(d.getMinutes() + 1);
 
   // Safety: search up to 4 years worth of minutes (~2.1M iterations max).
   const MAX_CRON_SEARCH_YEARS = 4;
   const maxIterations = MAX_CRON_SEARCH_YEARS * 366 * 24 * 60;
 
   for (let i = 0; i < maxIterations; i++) {
-    // Get time components — in the target timezone if specified, otherwise UTC
     let month: number, dayOfMonth: number, dayOfWeek: number, hour: number, minute: number;
-    if (timezone) {
-      const local = getLocalParts(d, timezone);
+    if (useIntlTz) {
+      const local = getLocalParts(d, timezone!);
       month = local.month;
       dayOfMonth = local.day;
       dayOfWeek = local.dow;
       hour = local.hour;
       minute = local.minute;
     } else {
-      month = d.getUTCMonth() + 1;
-      dayOfMonth = d.getUTCDate();
-      dayOfWeek = d.getUTCDay();
-      hour = d.getUTCHours();
-      minute = d.getUTCMinutes();
+      // Local time — uses machine timezone automatically
+      month = d.getMonth() + 1;
+      dayOfMonth = d.getDate();
+      dayOfWeek = d.getDay();
+      hour = d.getHours();
+      minute = d.getMinutes();
     }
 
-    // Check month
-    if (!cron.months.includes(month)) {
-      advanceToNextMonth(d, cron.months);
-      continue;
-    }
-
-    // Check day of month AND day of week (both must match)
-    if (!cron.daysOfMonth.includes(dayOfMonth) || !cron.daysOfWeek.includes(dayOfWeek)) {
-      d.setUTCDate(d.getUTCDate() + 1);
-      d.setUTCHours(0, 0, 0, 0);
-      continue;
-    }
-
-    // Check hour
-    if (!cron.hours.includes(hour)) {
-      const nextHour = findNext(cron.hours, hour);
-      if (nextHour !== null) {
-        d.setUTCHours(nextHour, 0, 0, 0);
+    // Check all cron fields
+    if (!cron.months.includes(month) ||
+        !cron.daysOfMonth.includes(dayOfMonth) ||
+        !cron.daysOfWeek.includes(dayOfWeek) ||
+        !cron.hours.includes(hour) ||
+        !cron.minutes.includes(minute)) {
+      if (useIntlTz) {
+        // When using explicit timezones, advance one minute at a time to avoid
+        // UTC-vs-local mismatches in the fast-forward logic.
+        d.setUTCMinutes(d.getUTCMinutes() + 1);
       } else {
-        d.setUTCDate(d.getUTCDate() + 1);
-        d.setUTCHours(0, 0, 0, 0);
-      }
-      continue;
-    }
-
-    // Check minute
-    if (!cron.minutes.includes(minute)) {
-      const nextMin = findNext(cron.minutes, minute);
-      if (nextMin !== null) {
-        d.setUTCMinutes(nextMin, 0, 0);
-      } else {
-        d.setUTCHours(d.getUTCHours() + 1, 0, 0, 0);
+        // Local time — use fast-forward optimizations
+        if (!cron.months.includes(month)) {
+          advanceToNextMonthLocal(d, cron.months);
+        } else if (!cron.daysOfMonth.includes(dayOfMonth) || !cron.daysOfWeek.includes(dayOfWeek)) {
+          d.setDate(d.getDate() + 1);
+          d.setHours(0, 0, 0, 0);
+        } else if (!cron.hours.includes(hour)) {
+          const nextHour = findNext(cron.hours, hour);
+          if (nextHour !== null) {
+            d.setHours(nextHour, 0, 0, 0);
+          } else {
+            d.setDate(d.getDate() + 1);
+            d.setHours(0, 0, 0, 0);
+          }
+        } else {
+          const nextMin = findNext(cron.minutes, minute);
+          if (nextMin !== null) {
+            d.setMinutes(nextMin, 0, 0);
+          } else {
+            d.setHours(d.getHours() + 1, 0, 0, 0);
+          }
+        }
       }
       continue;
     }
@@ -351,27 +357,29 @@ export function nextCronTickFromExpression(
  */
 export function previousCronTick(cron: ParsedCron, before: Date, timezone?: string): Date | null {
   const d = new Date(before.getTime());
+  const useIntlTz = !!timezone;
+
   // Snap to current minute (floor)
-  d.setUTCSeconds(0, 0);
+  d.setSeconds(0, 0);
 
   const MAX_CRON_SEARCH_YEARS = 4;
   const maxIterations = MAX_CRON_SEARCH_YEARS * 366 * 24 * 60;
 
   for (let i = 0; i < maxIterations; i++) {
     let month: number, dayOfMonth: number, dayOfWeek: number, hour: number, minute: number;
-    if (timezone) {
-      const local = getLocalParts(d, timezone);
+    if (useIntlTz) {
+      const local = getLocalParts(d, timezone!);
       month = local.month;
       dayOfMonth = local.day;
       dayOfWeek = local.dow;
       hour = local.hour;
       minute = local.minute;
     } else {
-      month = d.getUTCMonth() + 1;
-      dayOfMonth = d.getUTCDate();
-      dayOfWeek = d.getUTCDay();
-      hour = d.getUTCHours();
-      minute = d.getUTCMinutes();
+      month = d.getMonth() + 1;
+      dayOfMonth = d.getDate();
+      dayOfWeek = d.getDay();
+      hour = d.getHours();
+      minute = d.getMinutes();
     }
 
     if (
@@ -385,7 +393,7 @@ export function previousCronTick(cron: ParsedCron, before: Date, timezone?: stri
     }
 
     // Step back one minute
-    d.setUTCMinutes(d.getUTCMinutes() - 1);
+    d.setMinutes(d.getMinutes() - 1);
   }
 
   return null;
@@ -482,6 +490,27 @@ function advanceToNextMonth(d: Date, months: number[]): void {
     if (months.includes(month)) {
       d.setUTCFullYear(year, month - 1, 1);
       d.setUTCHours(0, 0, 0, 0);
+      return;
+    }
+  }
+}
+
+/**
+ * Like advanceToNextMonth but using local time methods.
+ */
+function advanceToNextMonthLocal(d: Date, months: number[]): void {
+  let year = d.getFullYear();
+  let month = d.getMonth() + 1; // 1-based
+
+  for (let i = 0; i < 48; i++) {
+    month++;
+    if (month > 12) {
+      month = 1;
+      year++;
+    }
+    if (months.includes(month)) {
+      d.setFullYear(year, month - 1, 1);
+      d.setHours(0, 0, 0, 0);
       return;
     }
   }

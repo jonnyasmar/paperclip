@@ -221,10 +221,16 @@ export function agentRoutes(db: Db) {
         (v): v is string => typeof v === "string" && v.trim().length > 0,
       );
     }
+    const cronTimezone =
+      typeof heartbeat.cronTimezone === "string" && heartbeat.cronTimezone.trim().length > 0
+        ? heartbeat.cronTimezone.trim()
+        : undefined;
+
     return {
       enabled: parseBooleanLike(heartbeat.enabled) ?? true,
       intervalSec: Math.max(0, parseNumberLike(heartbeat.intervalSec) ?? 0),
       cronSchedules,
+      cronTimezone,
     };
   }
 
@@ -533,6 +539,7 @@ export function agentRoutes(db: Db) {
           adapterType: row.adapterType,
           intervalSec: policy.intervalSec,
           cronSchedules: policy.cronSchedules,
+          cronTimezone: policy.cronTimezone,
           heartbeatEnabled: policy.enabled,
           schedulerActive: statusEligible && policy.enabled && (policy.intervalSec > 0 || policy.cronSchedules.length > 0),
           lastHeartbeatAt: row.lastHeartbeatAt,
