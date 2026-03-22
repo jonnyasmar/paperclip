@@ -5,7 +5,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
-import { Send, Mic, Paperclip, ChevronDown, ChevronRight, Wrench } from "lucide-react";
+import { Send, Mic, Paperclip, ChevronDown, ChevronRight, Wrench, Brain } from "lucide-react";
 import { MarkdownBody } from "./MarkdownBody";
 import { AgentIcon } from "./AgentIconPicker";
 import { Button } from "@/components/ui/button";
@@ -284,15 +284,16 @@ function ThinkingBlock({ text, streaming }: { text: string; streaming?: boolean 
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 text-xs text-muted-foreground/50 hover:text-muted-foreground/70 transition-colors"
+        className="flex items-center gap-1 text-xs text-purple-400/70 hover:text-purple-400 transition-colors"
       >
-        {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        <Brain className="h-3 w-3" />
         <span className="italic">Thinking{streaming ? "..." : ""}</span>
+        {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
       </button>
       {expanded && (
         <div
           ref={scrollRef}
-          className="max-h-32 overflow-y-auto text-xs text-muted-foreground/50 italic whitespace-pre-wrap leading-relaxed pl-4"
+          className="max-h-32 overflow-y-auto text-xs text-muted-foreground/60 italic whitespace-pre-wrap leading-relaxed pl-4"
         >
           {text}
         </div>
@@ -309,20 +310,20 @@ function ToolCallBlock({ toolCall }: { toolCall: ToolCall }) {
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 text-xs text-muted-foreground/50 hover:text-muted-foreground/70 transition-colors"
+        className="flex items-center gap-1 text-xs text-blue-400/70 hover:text-blue-400 transition-colors"
       >
         <Wrench className="h-3 w-3" />
         <span className="font-mono">{toolCall.name}</span>
-        {toolCall.result && <span className="text-green-500/60 text-[10px]">✓</span>}
+        {toolCall.result && <span className="text-green-500/70 text-[10px]">✓</span>}
         {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
       </button>
       {expanded && (
         <div className="pl-4 mt-0.5">
-          <pre className="text-[11px] text-muted-foreground/40 overflow-x-auto max-h-32 overflow-y-auto whitespace-pre-wrap">
+          <pre className="text-[11px] text-muted-foreground/60 overflow-x-auto max-h-32 overflow-y-auto whitespace-pre-wrap">
             {toolCall.args}
           </pre>
           {toolCall.result && (
-            <pre className="text-[11px] text-muted-foreground/40 overflow-x-auto max-h-32 overflow-y-auto whitespace-pre-wrap mt-1 pt-1 border-t border-muted-foreground/15">
+            <pre className="text-[11px] text-muted-foreground/60 overflow-x-auto max-h-32 overflow-y-auto whitespace-pre-wrap mt-1 pt-1 border-t border-muted-foreground/15">
               {toolCall.result}
             </pre>
           )}
