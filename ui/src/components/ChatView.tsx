@@ -519,8 +519,8 @@ export function ChatView({
       </div>
 
       {/* Input bar */}
-      <div className="border-t border-border p-3 bg-background">
-        <div className="flex items-end gap-2">
+      <div className="border-t border-border p-3 bg-background" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
+        <div className="flex items-center gap-2">
           {/* Attachment button (skeleton, disabled) */}
           <Button
             type="button"
