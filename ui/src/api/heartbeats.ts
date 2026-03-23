@@ -26,12 +26,12 @@ export interface LiveRunForIssue {
 }
 
 export const heartbeatsApi = {
-  list: (companyId: string, agentId?: string, limit?: number) => {
+  list: (companyId: string, agentId?: string, limit: number = 200) => {
     const searchParams = new URLSearchParams();
     if (agentId) searchParams.set("agentId", agentId);
-    if (limit) searchParams.set("limit", String(limit));
+    searchParams.set("limit", String(limit));
     const qs = searchParams.toString();
-    return api.get<HeartbeatRun[]>(`/companies/${companyId}/heartbeat-runs${qs ? `?${qs}` : ""}`);
+    return api.get<HeartbeatRun[]>(`/companies/${companyId}/heartbeat-runs?${qs}`);
   },
   get: (runId: string) => api.get<HeartbeatRun>(`/heartbeat-runs/${runId}`),
   events: (runId: string, afterSeq = 0, limit = 200) =>
