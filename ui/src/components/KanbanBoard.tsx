@@ -170,15 +170,11 @@ function KanbanCard({
           if (isDragging) e.preventDefault();
         }}
       >
-        <div className="flex items-start gap-1.5 mb-1.5">
+        <div className="flex items-center gap-1.5 mb-1.5">
           <span className="text-xs text-muted-foreground font-mono shrink-0">
             {issue.identifier ?? issue.id.slice(0, 8)}
           </span>
-          {runStatus && (
-            <span className="shrink-0 mt-0.5">
-              <RunIndicator status={runStatus} />
-            </span>
-          )}
+          {runStatus && <RunIndicator status={runStatus} />}
         </div>
         <p className="text-sm leading-snug line-clamp-2 mb-1.5">{issue.title}</p>
         <p className="text-[10px] text-muted-foreground/50 mb-1.5">{timeAgo(issue.updatedAt)}</p>

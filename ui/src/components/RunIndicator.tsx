@@ -12,6 +12,28 @@ export function RunIndicator({
   const isRunning = status === "running";
   const dotSize = size === "md" ? "h-2.5 w-2.5" : "h-2 w-2";
 
+  const dot = (
+    <span className={cn("relative flex", dotSize)}>
+      {isRunning && (
+        <span
+          className={cn(
+            "absolute inline-flex h-full w-full animate-pulse rounded-full opacity-75",
+            "bg-blue-400",
+          )}
+        />
+      )}
+      <span
+        className={cn(
+          "relative inline-flex rounded-full",
+          dotSize,
+          isRunning ? "bg-blue-500" : "bg-amber-400",
+        )}
+      />
+    </span>
+  );
+
+  if (!showLabel) return dot;
+
   return (
     <span
       className={cn(
@@ -19,35 +41,17 @@ export function RunIndicator({
         isRunning ? "bg-blue-500/10" : "bg-amber-500/10",
       )}
     >
-      <span className={cn("relative flex", dotSize)}>
-        {isRunning && (
-          <span
-            className={cn(
-              "absolute inline-flex h-full w-full animate-pulse rounded-full opacity-75",
-              "bg-blue-400",
-            )}
-          />
+      {dot}
+      <span
+        className={cn(
+          "hidden text-[11px] font-medium sm:inline",
+          isRunning
+            ? "text-blue-600 dark:text-blue-400"
+            : "text-amber-600 dark:text-amber-400",
         )}
-        <span
-          className={cn(
-            "relative inline-flex rounded-full",
-            dotSize,
-            isRunning ? "bg-blue-500" : "bg-amber-400",
-          )}
-        />
+      >
+        {isRunning ? "Live" : "Queued"}
       </span>
-      {showLabel && (
-        <span
-          className={cn(
-            "hidden text-[11px] font-medium sm:inline",
-            isRunning
-              ? "text-blue-600 dark:text-blue-400"
-              : "text-amber-600 dark:text-amber-400",
-          )}
-        >
-          {isRunning ? "Live" : "Queued"}
-        </span>
-      )}
     </span>
   );
 }
