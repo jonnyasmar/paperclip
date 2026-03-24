@@ -20,6 +20,7 @@ import {
 import { StatusIcon } from "./StatusIcon";
 import { PriorityIcon } from "./PriorityIcon";
 import { Identity } from "./Identity";
+import { RunIndicator } from "./RunIndicator";
 import { timeAgo } from "../lib/timeAgo";
 import type { Issue, CostByIssue } from "@paperclipai/shared";
 
@@ -45,7 +46,7 @@ interface Agent {
 interface KanbanBoardProps {
   issues: Issue[];
   agents?: Agent[];
-  liveIssueIds?: Set<string>;
+  liveIssueIds?: Map<string, "running" | "queued">;
   costByIssue?: Map<string, CostByIssue>;
   onUpdateIssue: (id: string, data: Record<string, unknown>) => void;
 }
@@ -62,7 +63,7 @@ function KanbanColumn({
   status: string;
   issues: Issue[];
   agents?: Agent[];
-  liveIssueIds?: Set<string>;
+  liveIssueIds?: Map<string, "running" | "queued">;
   costByIssue?: Map<string, CostByIssue>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
@@ -93,7 +94,7 @@ function KanbanColumn({
               key={issue.id}
               issue={issue}
               agents={agents}
-              isLive={liveIssueIds?.has(issue.id)}
+              runStatus={liveIssueIds?.get(issue.id)}
               cost={costByIssue?.get(issue.id)}
             />
           ))}
@@ -122,13 +123,13 @@ function formatCost(cents: number): string {
 function KanbanCard({
   issue,
   agents,
-  isLive,
+  runStatus,
   isOverlay,
   cost,
 }: {
   issue: Issue;
   agents?: Agent[];
-  isLive?: boolean;
+  runStatus?: "running" | "queued";
   isOverlay?: boolean;
   cost?: CostByIssue;
 }) {
@@ -173,10 +174,9 @@ function KanbanCard({
           <span className="text-xs text-muted-foreground font-mono shrink-0">
             {issue.identifier ?? issue.id.slice(0, 8)}
           </span>
-          {isLive && (
-            <span className="relative flex h-2 w-2 shrink-0 mt-0.5">
-              <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
+          {runStatus && (
+            <span className="shrink-0 mt-0.5">
+              <RunIndicator status={runStatus} />
             </span>
           )}
         </div>

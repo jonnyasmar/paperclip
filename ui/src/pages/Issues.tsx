@@ -58,9 +58,14 @@ export function Issues() {
   });
 
   const liveIssueIds = useMemo(() => {
-    const ids = new Set<string>();
+    const ids = new Map<string, "running" | "queued">();
     for (const run of liveRuns ?? []) {
-      if (run.issueId) ids.add(run.issueId);
+      if (!run.issueId) continue;
+      // "running" takes priority over "queued"
+      const existing = ids.get(run.issueId);
+      if (!existing || (run.status === "running" && existing === "queued")) {
+        ids.set(run.issueId, run.status === "running" ? "running" : "queued");
+      }
     }
     return ids;
   }, [liveRuns]);

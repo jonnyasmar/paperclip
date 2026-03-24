@@ -13,6 +13,7 @@ import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { createIssueDetailLocationState } from "../lib/issueDetailBreadcrumb";
 import { EmptyState } from "../components/EmptyState";
+import { RunIndicator } from "../components/RunIndicator";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { ApprovalCard } from "../components/ApprovalCard";
 import { IssueRow } from "../components/IssueRow";
@@ -352,11 +353,15 @@ export function Inbox() {
     [heartbeatRuns, dismissed],
   );
   const liveIssueIds = useMemo(() => {
-    const ids = new Set<string>();
+    const ids = new Map<string, "running" | "queued">();
     for (const run of heartbeatRuns ?? []) {
       if (run.status !== "running" && run.status !== "queued") continue;
       const issueId = readIssueIdFromRun(run);
-      if (issueId) ids.add(issueId);
+      if (!issueId) continue;
+      const existing = ids.get(issueId);
+      if (!existing || (run.status === "running" && existing === "queued")) {
+        ids.set(issueId, run.status === "running" ? "running" : "queued");
+      }
     }
     return ids;
   }, [heartbeatRuns]);
@@ -831,15 +836,7 @@ export function Inbox() {
                           {issue.identifier ?? issue.id.slice(0, 8)}
                         </span>
                         {liveIssueIds.has(issue.id) && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-1.5 py-0.5 sm:gap-1.5 sm:px-2">
-                            <span className="relative flex h-2 w-2">
-                              <span className="absolute inline-flex h-full w-full animate-pulse rounded-full bg-blue-400 opacity-75" />
-                              <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" />
-                            </span>
-                            <span className="hidden text-[11px] font-medium text-blue-600 dark:text-blue-400 sm:inline">
-                              Live
-                            </span>
-                          </span>
+                          <RunIndicator status={liveIssueIds.get(issue.id)!} showLabel />
                         )}
                       </>
                     )}

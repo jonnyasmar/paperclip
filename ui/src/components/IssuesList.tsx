@@ -13,6 +13,7 @@ import { timeAgo } from "../lib/timeAgo";
 import { StatusIcon } from "./StatusIcon";
 import { PriorityIcon } from "./PriorityIcon";
 import { EmptyState } from "./EmptyState";
+import { RunIndicator } from "./RunIndicator";
 import { Identity } from "./Identity";
 import { IssueRow } from "./IssueRow";
 import { PageSkeleton } from "./PageSkeleton";
@@ -151,7 +152,7 @@ interface IssuesListProps {
   isLoading?: boolean;
   error?: Error | null;
   agents?: Agent[];
-  liveIssueIds?: Set<string>;
+  liveIssueIds?: Map<string, "running" | "queued">;
   projectId?: string;
   viewStateKey: string;
   issueLinkState?: unknown;
@@ -689,15 +690,7 @@ export function IssuesList({
                         {issue.identifier ?? issue.id.slice(0, 8)}
                       </span>
                       {liveIssueIds?.has(issue.id) && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-1.5 py-0.5 sm:gap-1.5 sm:px-2">
-                          <span className="relative flex h-2 w-2">
-                            <span className="absolute inline-flex h-full w-full animate-pulse rounded-full bg-blue-400 opacity-75" />
-                            <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" />
-                          </span>
-                          <span className="hidden text-[11px] font-medium text-blue-600 dark:text-blue-400 sm:inline">
-                            Live
-                          </span>
-                        </span>
+                        <RunIndicator status={liveIssueIds.get(issue.id)!} showLabel />
                       )}
                     </>
                   )}
