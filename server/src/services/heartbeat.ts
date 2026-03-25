@@ -1435,7 +1435,7 @@ export function heartbeatService(db: Db) {
    * completion and cleanup).
    */
   async function expireStaleExecutionLocks(opts?: { staleThresholdMs?: number }) {
-    const thresholdMs = opts?.staleThresholdMs ?? 60 * 60 * 1000; // default 60 minutes
+    const thresholdMs = opts?.staleThresholdMs ?? 15 * 60 * 1000; // default 15 minutes
     const cutoff = new Date(Date.now() - thresholdMs);
 
     // Find issues with stale execution locks
@@ -1458,18 +1458,41 @@ export function heartbeatService(db: Db) {
     const expired: string[] = [];
 
     for (const issue of staleIssues) {
-      // Check if the referenced run is still active
+      // Check if the referenced run exists
       const run = issue.executionRunId
         ? await db
-          .select({ id: heartbeatRuns.id, status: heartbeatRuns.status })
+          .select({ id: heartbeatRuns.id, status: heartbeatRuns.status, agentId: heartbeatRuns.agentId })
           .from(heartbeatRuns)
           .where(eq(heartbeatRuns.id, issue.executionRunId))
           .then((rows) => rows[0] ?? null)
         : null;
 
-      // Skip if run is still legitimately active
+      // If the run is still queued/running but the lock is stale (>threshold),
+      // the run is stuck. Cancel it and release the lock.
       if (run && (run.status === "queued" || run.status === "running")) {
-        continue;
+        logger.error(
+          { runId: run.id, issueId: issue.identifier ?? issue.id, status: run.status, lockedAt: issue.executionLockedAt },
+          "cancelling stuck run holding stale execution lock",
+        );
+        await setRunStatus(run.id, "failed", {
+          error: "Stale lock reaper -- run stuck for >" + Math.round(thresholdMs / 60000) + " min",
+          errorCode: "stale_lock_reaped",
+          finishedAt: new Date(),
+        });
+        const wakeupId = await db
+          .select({ wakeupRequestId: heartbeatRuns.wakeupRequestId })
+          .from(heartbeatRuns)
+          .where(eq(heartbeatRuns.id, run.id))
+          .then((rows) => rows[0]?.wakeupRequestId ?? null);
+        if (wakeupId) {
+          await setWakeupStatus(wakeupId, "failed", {
+            finishedAt: new Date(),
+            error: "Stale lock reaper -- run stuck",
+          });
+        }
+        await finalizeAgentStatus(run.agentId, "failed");
+        runningProcesses.delete(run.id);
+        await startNextQueuedRunForAgent(run.agentId);
       }
 
       // Clear the stale lock

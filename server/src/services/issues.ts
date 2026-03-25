@@ -1365,9 +1365,24 @@ export function issueService(db: Db) {
       let m: RegExpExecArray | null;
       while ((m = re.exec(body)) !== null) tokens.add(m[1].toLowerCase());
       if (tokens.size === 0) return [];
-      const rows = await db.select({ id: agents.id, name: agents.name })
-        .from(agents).where(eq(agents.companyId, companyId));
-      return rows.filter(a => tokens.has(a.name.toLowerCase())).map(a => a.id);
+
+      // Retry once on DB failure to ensure mention-bypass path is not silently lost
+      let lastErr: unknown;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const rows = await db.select({ id: agents.id, name: agents.name })
+            .from(agents).where(eq(agents.companyId, companyId));
+          return rows.filter(a => tokens.has(a.name.toLowerCase())).map(a => a.id);
+        } catch (err) {
+          lastErr = err;
+          if (attempt === 0) {
+            // Brief pause before retry
+            await new Promise((resolve) => setTimeout(resolve, 200));
+          }
+        }
+      }
+      // Both attempts failed — throw so callers see the failure at ERROR level
+      throw lastErr;
     },
 
     findMentionedProjectIds: async (issueId: string) => {

@@ -838,7 +838,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
         try {
           mentionedIds = await svc.findMentionedAgents(issue.companyId, commentBody);
         } catch (err) {
-          logger.warn({ err, issueId: id }, "failed to resolve @-mentions");
+          logger.error({ err, issueId: id }, "failed to resolve @-mentions — mention-bypass path lost for this comment");
         }
 
         for (const mentionedId of mentionedIds) {
@@ -1249,7 +1249,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
       try {
         mentionedIds = await svc.findMentionedAgents(issue.companyId, req.body.body);
       } catch (err) {
-        logger.warn({ err, issueId: id }, "failed to resolve @-mentions");
+        logger.error({ err, issueId: id }, "failed to resolve @-mentions — mention-bypass path lost for this comment");
       }
 
       for (const mentionedId of mentionedIds) {
