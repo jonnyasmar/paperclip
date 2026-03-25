@@ -473,22 +473,48 @@ export async function startServer(): Promise<StartedServer> {
         .select({
           agentId: hbRuns.agentId,
           contextSnapshot: hbRuns.contextSnapshot,
+          sessionIdAfter: hbRuns.sessionIdAfter,
+          logRef: hbRuns.logRef,
         })
         .from(hbRuns)
         .where(inArr2(hbRuns.status, ["queued", "running"]));
-      return rows.map((r: any) => ({
-        agentId: r.agentId,
-        issueId: r.contextSnapshot?.issueId ?? null,
-        contextSnapshot: r.contextSnapshot ?? {},
-      }));
+      // Extract session ID: prefer sessionIdAfter, fall back to parsing from log
+      const results = [];
+      for (const r of rows) {
+        let sessionId = r.sessionIdAfter ?? null;
+        if (!sessionId && r.logRef) {
+          try {
+            const fs = await import("node:fs/promises");
+            const path = await import("node:path");
+            const logBasePath = path.join(
+              (await import("./home-paths.js")).resolvePaperclipInstanceRoot(),
+              "data/run-logs",
+            );
+            const logContent = await fs.readFile(path.join(logBasePath, r.logRef), "utf-8");
+            const match = logContent.match(/"session_id":"([^"]+)"/);
+            if (match) sessionId = match[1];
+          } catch { /* log may not exist yet for queued runs */ }
+        }
+        results.push({
+          agentId: r.agentId,
+          issueId: r.contextSnapshot?.issueId ?? null,
+          sessionId,
+          contextSnapshot: r.contextSnapshot ?? {},
+        });
+      }
+      return results;
     },
-    requeueRun: async (agentId: string, contextSnapshot: Record<string, unknown>) => {
+    requeueRun: async (agentId: string, contextSnapshot: Record<string, unknown>, sessionId: string | null) => {
       const heartbeat = heartbeatService(db as any);
       await heartbeat.wakeup(agentId, {
         source: "on_demand",
         triggerDetail: "system",
         reason: "hot_restart_resume",
-        contextSnapshot,
+        contextSnapshot: {
+          ...contextSnapshot,
+          // Pass the session ID so the run resumes with --resume
+          resumeSessionId: sessionId,
+        },
       });
     },
     cancelActiveRuns: async (companyId: string) => {

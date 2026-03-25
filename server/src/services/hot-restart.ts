@@ -1,6 +1,7 @@
 export interface InterruptedRun {
   agentId: string;
   issueId: string | null;
+  sessionId: string | null;
   contextSnapshot: Record<string, unknown>;
 }
 
@@ -13,7 +14,7 @@ export interface HotRestartState {
 export function hotRestartService(deps: {
     getActiveRuns: () => Promise<InterruptedRun[]>;
     cancelActiveRuns: (companyId: string) => Promise<void>;
-    requeueRun: (agentId: string, contextSnapshot: Record<string, unknown>) => Promise<void>;
+    requeueRun: (agentId: string, contextSnapshot: Record<string, unknown>, sessionId: string | null) => Promise<void>;
     publishGlobalEvent: (event: {
       type: string;
       payload: Record<string, unknown>;
@@ -63,7 +64,8 @@ export function hotRestartService(deps: {
           await deps.requeueRun(run.agentId, {
             ...run.contextSnapshot,
             wakeReason: "hot_restart_resume",
-          });
+            resumeSessionId: run.sessionId,
+          }, run.sessionId);
         } catch {
           // Agent may have been terminated or task completed
         }

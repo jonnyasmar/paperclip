@@ -1791,7 +1791,9 @@ export function heartbeatService(db: Db) {
         runtimeSessionFallback,
     );
     let runtimeSessionIdForAdapter =
-      readNonEmptyString(runtimeSessionParams?.sessionId) ?? runtimeSessionFallback;
+      readNonEmptyString(runtimeSessionParams?.sessionId) ??
+      readNonEmptyString(context.resumeSessionId) ??
+      runtimeSessionFallback;
     let runtimeSessionParamsForAdapter = runtimeSessionParams;
 
     const sessionCompaction = await evaluateSessionCompaction({
