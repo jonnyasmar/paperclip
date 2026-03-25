@@ -1130,9 +1130,16 @@ export function agentRoutes(db: Db) {
       Object.prototype.hasOwnProperty.call(patchData, "adapterType") ||
       Object.prototype.hasOwnProperty.call(patchData, "adapterConfig");
     if (touchesAdapterConfiguration) {
+      const existingAdapterConfig = asRecord(existing.adapterConfig) ?? {};
+      const patchedAdapterConfig = asRecord(patchData.adapterConfig) ?? {};
+      // Deep-merge: patch fields override existing, but unmentioned fields are preserved.
+      // env is also deep-merged so patching one env var doesn't wipe the rest.
+      const mergedEnv = patchedAdapterConfig.env !== undefined
+        ? { ...(asRecord(existingAdapterConfig.env) ?? {}), ...(asRecord(patchedAdapterConfig.env) ?? {}) }
+        : existingAdapterConfig.env;
       const rawEffectiveAdapterConfig = Object.prototype.hasOwnProperty.call(patchData, "adapterConfig")
-        ? (asRecord(patchData.adapterConfig) ?? {})
-        : (asRecord(existing.adapterConfig) ?? {});
+        ? { ...existingAdapterConfig, ...patchedAdapterConfig, ...(mergedEnv !== undefined ? { env: mergedEnv } : {}) }
+        : existingAdapterConfig;
       const effectiveAdapterConfig = applyCreateDefaultsByAdapterType(
         requestedAdapterType,
         rawEffectiveAdapterConfig,
