@@ -842,8 +842,10 @@ export function issueRoutes(db: Db, storage: StorageService) {
         }
 
         for (const mentionedId of mentionedIds) {
-          if (wakeups.has(mentionedId)) continue;
           if (actor.actorType === "agent" && actor.actorId === mentionedId) continue;
+          // Upgrade existing wake to issue_comment_mentioned so it bypasses the
+          // issue execution lock.  Without this, an @-mentioned assignee only
+          // gets the weaker assignment/status wake which is blocked by the lock.
           wakeups.set(mentionedId, {
             source: "automation",
             triggerDetail: "system",
@@ -1251,8 +1253,10 @@ export function issueRoutes(db: Db, storage: StorageService) {
       }
 
       for (const mentionedId of mentionedIds) {
-        if (wakeups.has(mentionedId)) continue;
         if (actorIsAgent && actor.actorId === mentionedId) continue;
+        // Upgrade existing wake to issue_comment_mentioned so it bypasses the
+        // issue execution lock.  Without this, an @-mentioned assignee only
+        // gets the weaker issue_commented wake which is blocked by the lock.
         wakeups.set(mentionedId, {
           source: "automation",
           triggerDetail: "system",
